@@ -1,16 +1,113 @@
-# React + Vite
+# 🎓 SkillForge LMS
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+SkillForge is a full-stack Learning Management System (LMS) designed to provide a complete online learning experience for students and administrators.
 
-Currently, two official plugins are available:
+The platform allows students to explore courses, enroll in courses, submit assignments, track assignment status, and manage their profiles. Administrators can manage courses, assignments, users, and assignment submissions from a dedicated admin dashboard.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+---
 
-## React Compiler
+## 🚀 Features
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+### 👨‍🎓 Student Features
 
-## Expanding the Oxlint configuration
+- User registration and login
+- OTP-based email verification
+- Forgot password functionality
+- Reset password functionality
+- Browse available courses
+- View course details
+- Enroll in courses
+- View enrolled courses
+- Submit assignments
+- Upload assignment files
+- View submitted assignments
+- View assignment status
+- View instructor/admin feedback
+- Edit or replace rejected/pending assignments
+- Delete assignments
+- View submitted assignment files
+- Student profile
+- Notifications
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and Oxlint's TypeScript related rules in your project.
+---
+
+### 👨‍💼 Admin Features
+
+- Secure admin authentication
+- Admin dashboard
+- Course management
+- Create courses
+- Edit courses
+- Delete courses
+- Assignment management
+- Upload assignments
+- Approve assignments
+- Reject assignments
+- Provide feedback on submissions
+- View assignment files
+- User management
+- View registered users
+- Delete users
+- Admin profile
+
+---
+
+## 🛠️ Tech Stack
+
+### Frontend
+
+- React.js
+- Vite
+- React Router DOM
+- Tailwind CSS
+- Framer Motion
+- Lucide React
+- Axios
+
+### Backend
+
+- Node.js
+- Express.js
+- MongoDB
+- Mongoose
+- JWT Authentication
+- REST API
+
+### Cloud & Deployment
+
+- MongoDB Atlas
+- Cloudinary
+- Vercel
+- Render
+
+---
+
+## 📁 Project Structure
+
+```text
+learning/
+│
+├── frontend/
+│   ├── src/
+│   │   ├── components/
+│   │   ├── pages/
+│   │   ├── routes/
+│   │   ├── services/
+│   │   └── ...
+│   │
+│   ├── package.json
+│   └── vite.config.js
+│
+├── backend/
+│   ├── src/
+│   │   ├── controllers/
+│   │   ├── models/
+│   │   ├── routes/
+│   │   ├── middleware/
+│   │   ├── services/
+│   │   └── server.js
+│   │
+│   ├── package.json
+│   └── ...
+│
+└── README.md
