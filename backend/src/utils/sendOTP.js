@@ -1,3 +1,6 @@
+const dns = require("dns");
+dns.setDefaultResultOrder("ipv4first");
+
 const nodemailer = require("nodemailer");
 
 const sendOTP = async (email, otp) => {
@@ -10,8 +13,6 @@ const sendOTP = async (email, otp) => {
       user: process.env.EMAIL_USER,
       pass: process.env.EMAIL_PASS,
     },
-
-    family: 4,
   });
 
   const mailOptions = {
@@ -20,8 +21,11 @@ const sendOTP = async (email, otp) => {
     subject: "Email Verification OTP",
     html: `
       <h2>Email Verification</h2>
+
       <p>Your OTP is:</p>
+
       <h1>${otp}</h1>
+
       <p>OTP expires in 5 minutes.</p>
     `,
   };
