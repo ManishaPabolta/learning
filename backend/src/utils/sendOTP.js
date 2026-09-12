@@ -5,10 +5,13 @@ const sendOTP = async (email, otp) => {
     host: "smtp.gmail.com",
     port: 587,
     secure: false,
+
     auth: {
       user: process.env.EMAIL_USER,
       pass: process.env.EMAIL_PASS,
     },
+
+    family: 4,
   });
 
   const mailOptions = {
@@ -17,11 +20,8 @@ const sendOTP = async (email, otp) => {
     subject: "Email Verification OTP",
     html: `
       <h2>Email Verification</h2>
-
       <p>Your OTP is:</p>
-
       <h1>${otp}</h1>
-
       <p>OTP expires in 5 minutes.</p>
     `,
   };
