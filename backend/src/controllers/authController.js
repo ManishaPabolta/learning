@@ -124,10 +124,7 @@ exports.sendOTP = async (req, res) => {
       success: true,
       message: "OTP sent successfully",
       userId: user._id,
-
-      // Only for development/testing
-      // Production mein remove kar dena
-      otp,
+      
     });
 
   } catch (error) {
