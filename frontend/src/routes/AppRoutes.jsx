@@ -47,13 +47,15 @@ import PublicRoute from "./PublicRoute";
 const AppRoutes = () => {
   return (
     <Routes>
-
       {/* ==================================================
-          PUBLIC AUTH
+          PUBLIC AUTH ROUTES
       ================================================== */}
 
       <Route element={<PublicRoute />}>
-        <Route path="/login" element={<Login />} />
+        <Route
+          path="/login"
+          element={<Login />}
+        />
 
         <Route
           path="/register"
@@ -76,9 +78,8 @@ const AppRoutes = () => {
         />
       </Route>
 
-
       {/* ==================================================
-          PUBLIC WEBSITE
+          PUBLIC WEBSITE ROUTES
       ================================================== */}
 
       <Route
@@ -101,115 +102,127 @@ const AppRoutes = () => {
         element={<CourseDetailsPage />}
       />
 
-{/* ==================================================
-    STUDENT ROUTES
-================================================== */}
+      {/* ==================================================
+          STUDENT ROUTES
+      ================================================== */}
 
-<Route element={<ProtectedRoute />}>
-  <Route element={<StudentLayout />}>
+      <Route element={<ProtectedRoute />}>
+        <Route element={<StudentLayout />}>
 
-    {/* DASHBOARD */}
-    <Route
-      path="/student"
-      element={<StudentDashboard />}
-    />
+          {/* ================= STUDENT DASHBOARD ================= */}
 
-    {/* MY COURSES */}
-    <Route
-      path="/student/courses"
-      element={<MyCourses />}
-    />
+          <Route
+            path="/student"
+            element={<StudentDashboard />}
+          />
 
-    {/* MY ASSIGNMENTS */}
-    <Route
-      path="/student/assignments"
-      element={<MyAssignments />}
-    />
+          {/* ================= MY COURSES ================= */}
 
-    {/* SUBMIT NEW ASSIGNMENT */}
-    <Route
-      path="/student/assignments/submit"
-      element={<SubmitAssignment />}
-    />
+          <Route
+            path="/student/courses"
+            element={<MyCourses />}
+          />
 
-    {/* ASSIGNMENT DETAILS */}
-    <Route
-      path="/student/assignments/:id"
-      element={<AssignmentDetails />}
-    />
+          {/* ================= ASSIGNMENTS ================= */}
 
-    {/* PROFILE */}
-    <Route
-      path="/student/profile"
-      element={<StudentProfile />}
-    />
+          {/* Student's submitted assignments */}
+          <Route
+            path="/student/assignments"
+            element={<MyAssignments />}
+          />
 
-  </Route>
-</Route>
+          {/* Student submits an admin-created assignment */}
+          <Route
+            path="/student/assignments/submit"
+            element={<SubmitAssignment />}
+          />
 
+          {/* Assignment / submission details */}
+          <Route
+            path="/student/assignments/:id"
+            element={<AssignmentDetails />}
+          />
+
+          {/* ================= STUDENT PROFILE ================= */}
+
+          <Route
+            path="/student/profile"
+            element={<StudentProfile />}
+          />
+
+        </Route>
+      </Route>
 
       {/* ==================================================
-          ADMIN
+          ADMIN ROUTES
       ================================================== */}
 
       <Route element={<AdminRoute />}>
-
         <Route element={<AdminLayout />}>
 
-          {/* Dashboard */}
+          {/* ================= ADMIN DASHBOARD ================= */}
+
           <Route
             path="/admin"
             element={<AdminDashboard />}
           />
 
-          {/* Profile */}
+          {/* ================= ADMIN PROFILE ================= */}
+
           <Route
             path="/admin/profile"
             element={<AdminProfile />}
           />
 
-          {/* Courses */}
+          {/* ================= COURSES ================= */}
+
+          {/* All courses */}
           <Route
             path="/admin/courses"
             element={<ManageCourses />}
           />
 
+          {/* Create course */}
           <Route
             path="/admin/courses/add"
             element={<AddCourse />}
           />
 
+          {/* Edit course */}
           <Route
             path="/admin/courses/edit/:id"
             element={<EditCourse />}
           />
 
-          {/* Assignments */}
+          {/* ================= ASSIGNMENTS ================= */}
+
+          {/* Manage all assignments and student submissions */}
           <Route
             path="/admin/assignments"
             element={<ManageAssignments />}
           />
 
+          {/* Create new assignment */}
           <Route
             path="/admin/assignments/add"
             element={<AddAssignment />}
           />
 
+          {/* Edit assignment */}
           <Route
             path="/admin/assignments/edit/:id"
             element={<EditAssignment />}
           />
 
-          {/* Users */}
+          {/* ================= USERS ================= */}
+
           <Route
             path="/admin/users"
             element={<ManageUsers />}
           />
 
         </Route>
-
       </Route>
-
 
       {/* ==================================================
           ERROR ROUTES
@@ -226,14 +239,13 @@ const AppRoutes = () => {
       />
 
       {/* ==================================================
-          404
+          404 NOT FOUND
       ================================================== */}
 
       <Route
         path="*"
         element={<NotFound />}
       />
-
     </Routes>
   );
 };

@@ -1,5 +1,4 @@
-
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import axios from "axios";
 import { motion } from "framer-motion";
 import {
@@ -10,552 +9,665 @@ import {
   CheckCircle2,
   AlertCircle,
   BookOpen,
+  CalendarDays,
+  X,
+  ChevronDown,
 } from "lucide-react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import useAuth from "../../hooks/useAuth";
 
-const API_URL = import.meta.env.VITE_API_URL;
+const API_URL =
+  import.meta.env.VITE_API_URL || "http://localhost:5000/api";
+
+const MAX_FILE_SIZE = 10 * 1024 * 1024;
+
+const ALLOWED_TYPES = [
+  "application/pdf",
+  "image/jpeg",
+  "image/jpg",
+  "image/png",
+  "application/msword",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+];
+
+const ALLOWED_EXTENSIONS = [
+  ".pdf",
+  ".jpg",
+  ".jpeg",
+  ".png",
+  ".doc",
+  ".docx",
+];
 
 const AddAssignment = () => {
-  const { accessToken, user } = useAuth();
+  const navigate = useNavigate();
+  const { accessToken } = useAuth();
+
+  const fileInputRef = useRef(null);
 
   const [courses, setCourses] = useState([]);
-  const [course, setCourse] = useState("");
+  const [loadingCourses, setLoadingCourses] = useState(true);
+  const [courseError, setCourseError] = useState("");
+
+  const [formData, setFormData] = useState({
+    title: "",
+    description: "",
+    courseId: "",
+    dueDate: "",
+  });
+
   const [file, setFile] = useState(null);
 
   const [loading, setLoading] = useState(false);
-  const [loadingCourses, setLoadingCourses] = useState(true);
-  const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
+
+  // =====================================================
+  // FETCH COURSES
+  // =====================================================
+
+  const fetchCourses = async () => {
+    try {
+      setLoadingCourses(true);
+      setCourseError("");
+
+      const response = await axios.get(`${API_URL}/courses`, {
+        params: {
+          page: 1,
+          limit: 100,
+        },
+        timeout: 10000,
+      });
+
+      console.log("COURSES RESPONSE:", response.data);
+
+      const courseList = Array.isArray(response.data?.courses)
+        ? response.data.courses
+        : [];
+
+      setCourses(courseList);
+
+      if (courseList.length === 0) {
+        setCourseError("No courses found. Please create a course first.");
+      }
+    } catch (err) {
+      console.error("FETCH COURSES ERROR:", err);
+
+      if (err.code === "ECONNABORTED") {
+        setCourseError("Course request timed out.");
+      } else {
+        setCourseError(
+          err.response?.data?.message ||
+            "Unable to load courses."
+        );
+      }
+    } finally {
+      setLoadingCourses(false);
+    }
+  };
 
   useEffect(() => {
-    const fetchCourses = async () => {
-      try {
-        const response = await axios.get(
-          `${API_URL}/courses`,
-          {
-            params: {
-              page: 1,
-              limit: 100,
-            },
-          }
-        );
-
-        setCourses(response.data.courses || []);
-      } catch (err) {
-        setError("Unable to load courses.");
-      } finally {
-        setLoadingCourses(false);
-      }
-    };
-
     fetchCourses();
   }, []);
+
+  // =====================================================
+  // INPUT CHANGE
+  // =====================================================
+
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+
+    setFormData((prev) => ({
+      ...prev,
+      [name]: value,
+    }));
+
+    setError("");
+    setSuccess("");
+  };
+
+  // =====================================================
+  // FILE VALIDATION
+  // =====================================================
+
+  const validateFile = (selectedFile) => {
+    if (!selectedFile) return true;
+
+    if (selectedFile.size > MAX_FILE_SIZE) {
+      setError("File size must be less than 10 MB.");
+      return false;
+    }
+
+    const fileName = selectedFile.name.toLowerCase();
+
+    const validExtension = ALLOWED_EXTENSIONS.some((extension) =>
+      fileName.endsWith(extension)
+    );
+
+    const validMimeType =
+      !selectedFile.type ||
+      ALLOWED_TYPES.includes(selectedFile.type);
+
+    if (!validExtension || !validMimeType) {
+      setError(
+        "Only PDF, JPG, JPEG, PNG, DOC and DOCX files are allowed."
+      );
+      return false;
+    }
+
+    return true;
+  };
+
+  // =====================================================
+  // FILE CHANGE
+  // =====================================================
+
+  const handleFileChange = (e) => {
+    const selectedFile = e.target.files?.[0];
+
+    if (!selectedFile) return;
+
+    setError("");
+
+    if (!validateFile(selectedFile)) {
+      e.target.value = "";
+      setFile(null);
+      return;
+    }
+
+    setFile(selectedFile);
+  };
+
+  // =====================================================
+  // REMOVE FILE
+  // =====================================================
+
+  const removeFile = () => {
+    setFile(null);
+
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  };
+
+  // =====================================================
+  // SUBMIT ASSIGNMENT
+  // =====================================================
 
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    if (!course) {
+    setError("");
+    setSuccess("");
+
+    // Required validation
+    if (!formData.title.trim()) {
+      setError("Please enter assignment title.");
+      return;
+    }
+
+    if (!formData.description.trim()) {
+      setError("Please enter assignment description.");
+      return;
+    }
+
+    if (!formData.courseId) {
       setError("Please select a course.");
       return;
     }
 
-    if (!file) {
-      setError("Please select an assignment file.");
+    if (!formData.dueDate) {
+      setError("Please select a due date.");
+      return;
+    }
+
+    // Check selected date
+    const selectedDate = new Date(formData.dueDate);
+    const now = new Date();
+
+    if (selectedDate <= now) {
+      setError("Due date must be in the future.");
+      return;
+    }
+
+    if (file && !validateFile(file)) {
+      return;
+    }
+
+    if (!accessToken) {
+      setError("You are not logged in. Please login again.");
       return;
     }
 
     try {
       setLoading(true);
-      setError("");
-      setMessage("");
 
-      const formData = new FormData();
+      const data = new FormData();
 
-      formData.append("file", file);
-      formData.append("course", course);
+      data.append("title", formData.title.trim());
+      data.append("description", formData.description.trim());
 
-      await axios.post(
-        `${API_URL}/assignments/upload`,
-        formData,
-        {
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-            "Content-Type": "multipart/form-data",
-          },
-        }
-      );
+      // IMPORTANT:
+      // Backend controller expects courseId
+      data.append("courseId", formData.courseId);
 
-      setMessage("Assignment uploaded successfully!");
+      data.append("dueDate", formData.dueDate);
+
+      if (file) {
+        data.append("file", file);
+      }
+
+      console.log("CREATING ASSIGNMENT:", {
+        title: formData.title,
+        courseId: formData.courseId,
+        dueDate: formData.dueDate,
+        file: file?.name,
+      });
+
+      await axios.post(`${API_URL}/assignments`, data, {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+        timeout: 30000,
+      });
+
+      setSuccess("Assignment created successfully!");
+
+      setFormData({
+        title: "",
+        description: "",
+        courseId: "",
+        dueDate: "",
+      });
+
       setFile(null);
+
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
+
+      // Redirect after success
+      setTimeout(() => {
+        navigate("/admin/assignments");
+      }, 1200);
     } catch (err) {
+      console.error("CREATE ASSIGNMENT ERROR:", err);
+
       setError(
         err.response?.data?.message ||
-          "Unable to upload assignment."
+          "Failed to create assignment. Please try again."
       );
     } finally {
       setLoading(false);
     }
   };
 
+  // =====================================================
+  // FORMAT FILE SIZE
+  // =====================================================
+
+  const formatFileSize = (bytes) => {
+    if (bytes < 1024) {
+      return `${bytes} B`;
+    }
+
+    if (bytes < 1024 * 1024) {
+      return `${(bytes / 1024).toFixed(1)} KB`;
+    }
+
+    return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+  };
+
   return (
-    <div className="relative min-h-screen overflow-hidden bg-gradient-to-br from-emerald-50 via-white to-green-50 px-5 py-10 text-slate-900">
+    <div className="min-h-screen bg-slate-50 px-4 py-6 sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-4xl">
 
-      {/* ================= BACKGROUND DECORATION ================= */}
-
-      <div className="pointer-events-none absolute -left-32 -top-32 h-80 w-80 rounded-full bg-emerald-400/10 blur-3xl animate-pulse" />
-
-      <div className="pointer-events-none absolute -bottom-32 -right-32 h-96 w-96 rounded-full bg-green-400/10 blur-3xl animate-pulse" />
-
-      <div className="pointer-events-none absolute left-[12%] top-[25%] h-2 w-2 rounded-full bg-emerald-400/60 animate-ping" />
-
-      <div className="pointer-events-none absolute right-[15%] top-[18%] h-1.5 w-1.5 rounded-full bg-green-500/50 animate-pulse" />
-
-      <div className="pointer-events-none absolute bottom-[20%] left-[20%] h-1.5 w-1.5 rounded-full bg-lime-500/50 animate-bounce" />
-
-      <div className="relative z-10 mx-auto max-w-2xl">
-
-        {/* ================= BACK ================= */}
-
-        <Link
-          to="/admin/assignments"
-          className="
-            group
-            inline-flex
-            items-center
-            gap-2
-            rounded-xl
-            border
-            border-emerald-100
-            bg-white/80
-            px-4
-            py-2.5
-            text-sm
-            font-semibold
-            text-slate-600
-            shadow-sm
-            backdrop-blur-md
-            transition-all
-            duration-300
-
-            hover:-translate-x-1
-            hover:border-emerald-200
-            hover:bg-emerald-50
-            hover:text-emerald-700
-          "
-        >
-          <ArrowLeft
-            className="h-4 w-4 transition-transform duration-300 group-hover:-translate-x-1"
-          />
-
-          Back
-        </Link>
-
-        {/* ================= MAIN CARD ================= */}
+        {/* =====================================================
+            HEADER
+        ===================================================== */}
 
         <motion.div
-          initial={{
-            opacity: 0,
-            y: 25,
-          }}
-          animate={{
-            opacity: 1,
-            y: 0,
-          }}
-          transition={{
-            duration: 0.5,
-            ease: "easeOut",
-          }}
-          className="
-            relative
-            mt-8
-            overflow-hidden
-            rounded-[2rem]
-            border
-            border-emerald-100
-            bg-white/90
-            p-7
-            shadow-2xl
-            shadow-emerald-900/10
-            backdrop-blur-2xl
-            sm:p-9
-          "
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="mb-6"
         >
-
-          {/* Card Glow */}
-          <div className="pointer-events-none absolute -right-24 -top-24 h-64 w-64 rounded-full bg-emerald-400/10 blur-3xl" />
-
-          {/* Top Accent */}
-          <div className="absolute left-0 right-0 top-0 h-1 bg-gradient-to-r from-emerald-600 via-green-500 to-lime-400" />
-
-          {/* ================= HEADER ================= */}
-
-          <div className="relative">
-
-            <motion.div
-              initial={{
-                opacity: 0,
-                scale: 0.8,
-              }}
-              animate={{
-                opacity: 1,
-                scale: 1,
-              }}
-              transition={{
-                delay: 0.15,
-                duration: 0.4,
-              }}
-              className="
-                flex
-                h-14
-                w-14
-                items-center
-                justify-center
-                rounded-2xl
-                bg-gradient-to-br
-                from-emerald-100
-                to-green-50
-                text-emerald-600
-                shadow-sm
-              "
-            >
-              <Upload className="h-7 w-7" />
-            </motion.div>
-
-            <motion.h1
-              initial={{
-                opacity: 0,
-                x: -15,
-              }}
-              animate={{
-                opacity: 1,
-                x: 0,
-              }}
-              transition={{
-                delay: 0.2,
-              }}
-              className="mt-6 text-3xl font-black tracking-tight text-slate-900"
-            >
-              Upload Assignment
-            </motion.h1>
-
-            <p className="mt-2 max-w-lg text-sm leading-6 text-slate-500">
-              Upload an assignment file for the selected course.
-            </p>
-
-          </div>
-
-          {/* ================= SUCCESS MESSAGE ================= */}
-
-          {message && (
-            <motion.div
-              initial={{
-                opacity: 0,
-                y: -10,
-              }}
-              animate={{
-                opacity: 1,
-                y: 0,
-              }}
-              className="
-                mt-6
-                flex
-                items-start
-                gap-3
-                rounded-2xl
-                border
-                border-emerald-200
-                bg-emerald-50
-                p-4
-                text-sm
-                font-medium
-                text-emerald-700
-              "
-            >
-              <CheckCircle2
-                size={19}
-                className="mt-0.5 shrink-0 text-emerald-600"
-              />
-
-              <span>{message}</span>
-            </motion.div>
-          )}
-
-          {/* ================= ERROR MESSAGE ================= */}
-
-          {error && (
-            <motion.div
-              initial={{
-                opacity: 0,
-                y: -10,
-              }}
-              animate={{
-                opacity: 1,
-                y: 0,
-              }}
-              className="
-                mt-6
-                flex
-                items-start
-                gap-3
-                rounded-2xl
-                border
-                border-red-200
-                bg-red-50
-                p-4
-                text-sm
-                font-medium
-                text-red-600
-              "
-            >
-              <AlertCircle
-                size={19}
-                className="mt-0.5 shrink-0 text-red-500"
-              />
-
-              <span>{error}</span>
-            </motion.div>
-          )}
-
-          {/* ================= FORM ================= */}
-
-          <form
-            onSubmit={handleSubmit}
-            className="relative mt-8 space-y-6"
+          <Link
+            to="/admin/assignments"
+            className="mb-4 inline-flex items-center gap-2 text-sm font-medium text-slate-600 transition hover:text-emerald-600"
           >
+            <ArrowLeft size={18} />
+            Back to Assignments
+          </Link>
 
-            {/* ================= COURSE ================= */}
+          <div className="flex items-center gap-4">
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-600">
+              <BookOpen size={25} />
+            </div>
 
             <div>
+              <h1 className="text-2xl font-bold text-slate-900 sm:text-3xl">
+                Create Assignment
+              </h1>
 
-              <label className="mb-2 flex items-center gap-2 text-sm font-bold text-slate-700">
-                <BookOpen
-                  size={16}
-                  className="text-emerald-600"
-                />
+              <p className="mt-1 text-sm text-slate-500">
+                Create an assignment for a specific course.
+              </p>
+            </div>
+          </div>
+        </motion.div>
 
-                Course
+        {/* =====================================================
+            ALERTS
+        ===================================================== */}
+
+        {error && (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mb-5 flex items-start gap-3 rounded-2xl border border-red-200 bg-red-50 p-4 text-red-700"
+          >
+            <AlertCircle
+              size={20}
+              className="mt-0.5 shrink-0"
+            />
+
+            <p className="text-sm font-medium">
+              {error}
+            </p>
+          </motion.div>
+        )}
+
+        {success && (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mb-5 flex items-center gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-emerald-700"
+          >
+            <CheckCircle2
+              size={20}
+              className="shrink-0"
+            />
+
+            <p className="text-sm font-medium">
+              {success}
+            </p>
+          </motion.div>
+        )}
+
+        {/* =====================================================
+            FORM
+        ===================================================== */}
+
+        <motion.form
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.1 }}
+          onSubmit={handleSubmit}
+          className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-8"
+        >
+          {/* TITLE */}
+
+          <div className="mb-6">
+            <label
+              htmlFor="title"
+              className="mb-2 block text-sm font-semibold text-slate-700"
+            >
+              Assignment Title
+              <span className="ml-1 text-red-500">*</span>
+            </label>
+
+            <input
+              id="title"
+              name="title"
+              type="text"
+              value={formData.title}
+              onChange={handleChange}
+              placeholder="e.g. Build a React Todo App"
+              maxLength={150}
+              className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10"
+              disabled={loading}
+            />
+          </div>
+
+          {/* DESCRIPTION */}
+
+          <div className="mb-6">
+            <label
+              htmlFor="description"
+              className="mb-2 block text-sm font-semibold text-slate-700"
+            >
+              Description
+              <span className="ml-1 text-red-500">*</span>
+            </label>
+
+            <textarea
+              id="description"
+              name="description"
+              value={formData.description}
+              onChange={handleChange}
+              placeholder="Explain what students need to complete..."
+              rows={6}
+              maxLength={3000}
+              className="w-full resize-none rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10"
+              disabled={loading}
+            />
+
+            <p className="mt-1 text-right text-xs text-slate-400">
+              {formData.description.length}/3000
+            </p>
+          </div>
+
+          {/* COURSE + DUE DATE */}
+
+          <div className="mb-6 grid gap-6 md:grid-cols-2">
+
+            {/* COURSE */}
+
+            <div>
+              <label
+                htmlFor="courseId"
+                className="mb-2 block text-sm font-semibold text-slate-700"
+              >
+                Select Course
+                <span className="ml-1 text-red-500">*</span>
               </label>
 
               <div className="relative">
-
                 <select
-                  value={course}
-                  onChange={(e) =>
-                    setCourse(e.target.value)
-                  }
-                  disabled={loadingCourses}
-                  className="
-                    w-full
-                    appearance-none
-                    rounded-xl
-                    border
-                    border-slate-200
-                    bg-slate-50
-                    px-4
-                    py-3.5
-                    text-sm
-                    font-medium
-                    text-slate-800
-                    outline-none
-                    transition-all
-                    duration-300
-
-                    hover:border-emerald-200
-
-                    focus:border-emerald-500
-                    focus:bg-white
-                    focus:ring-4
-                    focus:ring-emerald-500/10
-
-                    disabled:cursor-not-allowed
-                    disabled:opacity-60
-                  "
+                  id="courseId"
+                  name="courseId"
+                  value={formData.courseId}
+                  onChange={handleChange}
+                  disabled={loadingCourses || loading}
+                  required
+                  className="w-full appearance-none rounded-xl border border-slate-200 bg-white px-4 py-3 pr-11 text-sm text-slate-800 outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 disabled:cursor-not-allowed disabled:bg-slate-50"
                 >
                   <option value="">
                     {loadingCourses
                       ? "Loading courses..."
-                      : "Select course"}
+                      : "Select Course"}
                   </option>
 
-                  {courses.map((item) => (
-                    <option
-                      key={item._id}
-                      value={item._id}
-                    >
-                      {item.title}
-                    </option>
-                  ))}
+                  {!loadingCourses &&
+                    courses.map((course) => (
+                      <option
+                        key={course._id}
+                        value={course._id}
+                      >
+                        {course.title}
+                      </option>
+                    ))}
                 </select>
 
-                {/* Arrow */}
-                <div className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-slate-400">
-                  <svg
-                    width="18"
-                    height="18"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                  >
-                    <path d="m6 9 6 6 6-6" />
-                  </svg>
-                </div>
-
+                <ChevronDown
+                  className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-slate-400"
+                  size={18}
+                />
               </div>
 
+              {courseError && (
+                <div className="mt-2 flex items-center justify-between gap-2">
+                  <p className="text-xs text-red-500">
+                    {courseError}
+                  </p>
+
+                  <button
+                    type="button"
+                    onClick={fetchCourses}
+                    className="text-xs font-semibold text-emerald-600 hover:text-emerald-700"
+                  >
+                    Retry
+                  </button>
+                </div>
+              )}
+
+              {!loadingCourses &&
+                courses.length > 0 && (
+                  <p className="mt-2 text-xs text-slate-400">
+                    {courses.length} course
+                    {courses.length !== 1 ? "s" : ""} available
+                  </p>
+                )}
             </div>
 
-            {/* ================= FILE UPLOAD ================= */}
+            {/* DUE DATE */}
 
-            <label
-              className="
-                group
-                flex
-                cursor-pointer
-                flex-col
-                items-center
-                justify-center
-                rounded-2xl
-                border-2
-                border-dashed
-                border-emerald-200
-                bg-emerald-50/40
-                px-6
-                py-12
-                text-center
-                transition-all
-                duration-300
-
-                hover:border-emerald-400
-                hover:bg-emerald-50
-                hover:shadow-lg
-                hover:shadow-emerald-500/10
-              "
-            >
-
-              <div
-                className="
-                  flex
-                  h-16
-                  w-16
-                  items-center
-                  justify-center
-                  rounded-2xl
-                  bg-white
-                  text-emerald-600
-                  shadow-md
-                  shadow-emerald-900/5
-                  transition-all
-                  duration-300
-
-                  group-hover:-translate-y-1
-                  group-hover:scale-105
-                  group-hover:shadow-lg
-                "
+            <div>
+              <label
+                htmlFor="dueDate"
+                className="mb-2 block text-sm font-semibold text-slate-700"
               >
-                <FileText className="h-9 w-9" />
+                Due Date
+                <span className="ml-1 text-red-500">*</span>
+              </label>
+
+              <div className="relative">
+                <CalendarDays
+                  size={18}
+                  className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"
+                />
+
+                <input
+                  id="dueDate"
+                  name="dueDate"
+                  type="datetime-local"
+                  value={formData.dueDate}
+                  onChange={handleChange}
+                  required
+                  disabled={loading}
+                  className="w-full rounded-xl border border-slate-200 bg-white py-3 pl-11 pr-4 text-sm text-slate-800 outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 disabled:bg-slate-50"
+                />
               </div>
 
-              <p className="mt-5 max-w-full truncate px-4 text-sm font-bold text-slate-800 sm:text-base">
-                {file
-                  ? file.name
-                  : "Choose assignment file"}
-              </p>
-
               <p className="mt-2 text-xs text-slate-400">
-                PDF, DOC, DOCX and supported files
+                Students must submit the assignment before this date.
               </p>
+            </div>
+          </div>
 
-              {!file && (
-                <span className="mt-4 rounded-lg bg-white px-3 py-1.5 text-xs font-semibold text-emerald-600 shadow-sm">
-                  Browse files
-                </span>
-              )}
+          {/* FILE UPLOAD */}
 
-              {file && (
-                <span className="mt-4 flex items-center gap-1.5 text-xs font-semibold text-emerald-600">
-                  <CheckCircle2 size={14} />
-                  File selected
-                </span>
-              )}
-
-              <input
-                type="file"
-                onChange={(e) =>
-                  setFile(
-                    e.target.files?.[0] || null
-                  )
-                }
-                className="hidden"
-              />
-
+          <div className="mb-8">
+            <label className="mb-2 block text-sm font-semibold text-slate-700">
+              Assignment File
+              <span className="ml-2 text-xs font-normal text-slate-400">
+                Optional
+              </span>
             </label>
 
-            {/* ================= SUBMIT ================= */}
+            {!file ? (
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={loading}
+                className="group w-full rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50 p-8 text-center transition hover:border-emerald-400 hover:bg-emerald-50/40 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-white text-emerald-600 shadow-sm transition group-hover:scale-105">
+                  <Upload size={22} />
+                </div>
+
+                <p className="text-sm font-semibold text-slate-700">
+                  Click to upload assignment file
+                </p>
+
+                <p className="mt-1 text-xs text-slate-400">
+                  PDF, JPG, JPEG, PNG, DOC, DOCX • Maximum 10 MB
+                </p>
+              </button>
+            ) : (
+              <motion.div
+                initial={{ opacity: 0, scale: 0.98 }}
+                animate={{ opacity: 1, scale: 1 }}
+                className="flex items-center justify-between gap-4 rounded-2xl border border-emerald-200 bg-emerald-50 p-4"
+              >
+                <div className="flex min-w-0 items-center gap-3">
+                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-white text-emerald-600 shadow-sm">
+                    <FileText size={21} />
+                  </div>
+
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-semibold text-slate-700">
+                      {file.name}
+                    </p>
+
+                    <p className="mt-1 text-xs text-slate-400">
+                      {formatFileSize(file.size)}
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={removeFile}
+                  disabled={loading}
+                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white text-slate-500 transition hover:bg-red-50 hover:text-red-500"
+                >
+                  <X size={18} />
+                </button>
+              </motion.div>
+            )}
+
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
+              onChange={handleFileChange}
+              className="hidden"
+            />
+          </div>
+
+          {/* ACTIONS */}
+
+          <div className="flex flex-col-reverse gap-3 border-t border-slate-100 pt-6 sm:flex-row sm:justify-end">
+            <Link
+              to="/admin/assignments"
+              className="inline-flex items-center justify-center rounded-xl border border-slate-200 px-6 py-3 text-sm font-semibold text-slate-600 transition hover:bg-slate-50"
+            >
+              Cancel
+            </Link>
 
             <button
               type="submit"
-              disabled={loading}
-              className="
-                group
-                flex
-                w-full
-                items-center
-                justify-center
-                gap-2
-                rounded-xl
-                bg-gradient-to-r
-                from-emerald-600
-                via-green-500
-                to-lime-400
-                py-4
-                font-bold
-                text-white
-                shadow-lg
-                shadow-emerald-500/20
-                transition-all
-                duration-300
-
-                hover:-translate-y-0.5
-                hover:shadow-xl
-                hover:shadow-emerald-500/30
-
-                active:translate-y-0
-
-                disabled:cursor-not-allowed
-                disabled:opacity-60
-              "
+              disabled={loading || loadingCourses || courses.length === 0}
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-7 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {loading ? (
                 <>
-                  <Loader2 className="h-5 w-5 animate-spin" />
-                  Uploading...
+                  <Loader2
+                    size={18}
+                    className="animate-spin"
+                  />
+                  Creating Assignment...
                 </>
               ) : (
                 <>
-                  <Upload
-                    className="h-5 w-5 transition-transform duration-300 group-hover:-translate-y-0.5"
-                  />
-
-                  Upload Assignment
+                  <CheckCircle2 size={18} />
+                  Create Assignment
                 </>
               )}
             </button>
-
-          </form>
-
-          {/* Bottom Accent */}
-          <div className="absolute bottom-0 left-1/2 h-1 w-24 -translate-x-1/2 rounded-full bg-gradient-to-r from-emerald-500 to-lime-400" />
-
-        </motion.div>
-
-        {/* ================= FOOTER ================= */}
-
-        <p className="mt-6 text-center text-xs text-slate-400">
-          Upload assignments securely for your students.
-        </p>
-
+          </div>
+        </motion.form>
       </div>
     </div>
   );

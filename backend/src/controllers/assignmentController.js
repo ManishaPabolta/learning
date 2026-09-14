@@ -1,384 +1,1289 @@
 const fs = require("fs");
 
 const Assignment = require("../models/Assignment");
+const AssignmentSubmission = require("../models/AssignmentSubmission");
+const Course = require("../models/Course");
+
 const cloudinary = require("../config/cloudinary");
 
-// ==========================================
-// STUDENT - UPLOAD ASSIGNMENT
-// ==========================================
-exports.uploadAssignment = async (req, res) => {
+// =====================================================
+// HELPER - CLOUDINARY RESOURCE TYPE
+// =====================================================
+
+const getResourceType = (mimetype = "") => {
+  if (mimetype.startsWith("image/")) {
+    return "image";
+  }
+
+  return "raw";
+};
+
+// =====================================================
+// HELPER - DELETE LOCAL TEMP FILE
+// =====================================================
+
+const deleteLocalFile = (filePath) => {
   try {
-    // ------------------------------------------
-    // Check file
-    // ------------------------------------------
-    if (!req.file) {
-      return res.status(400).json({
-        success: false,
-        message: "Assignment file is required",
-      });
+    if (filePath && fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath);
     }
-
-    // ------------------------------------------
-    // Check course
-    // ------------------------------------------
-    if (!req.body.courseId) {
-      return res.status(400).json({
-        success: false,
-        message: "Course ID is required",
-      });
-    }
-
-    // ------------------------------------------
-    // Decide Cloudinary resource type
-    // ------------------------------------------
-    let resourceType = "raw";
-
-    const imageTypes = [
-      "image/png",
-      "image/jpg",
-      "image/jpeg",
-    ];
-
-    if (
-      req.file.mimetype === "application/pdf" ||
-      imageTypes.includes(req.file.mimetype)
-    ) {
-      resourceType = "image";
-    }
-
-    // ------------------------------------------
-    // Upload file to Cloudinary
-    // ------------------------------------------
-    const result = await cloudinary.uploader.upload(
-      req.file.path,
-      {
-        resource_type: resourceType,
-        folder: "assignments",
-        use_filename: true,
-        unique_filename: true,
-      }
+  } catch (error) {
+    console.error(
+      "LOCAL FILE DELETE ERROR:",
+      error.message
     );
+  }
+};
 
-    // ------------------------------------------
-    // Delete temporary local file
-    // ------------------------------------------
-    if (fs.existsSync(req.file.path)) {
-      fs.unlinkSync(req.file.path);
+// =====================================================
+// HELPER - DELETE CLOUDINARY FILE
+// =====================================================
+
+const deleteCloudinaryFile = async (
+  publicId,
+  fileType = ""
+) => {
+  if (!publicId) {
+    return;
+  }
+
+  try {
+    const resourceType = getResourceType(fileType);
+
+    await cloudinary.uploader.destroy(publicId, {
+      resource_type: resourceType,
+      type: "upload",
+    });
+  } catch (error) {
+    console.error(
+      "CLOUDINARY DELETE ERROR:",
+      error.message
+    );
+  }
+};
+
+// =====================================================
+// ADMIN - CREATE ASSIGNMENT
+// =====================================================
+
+const createAssignment = async (req, res) => {
+  try {
+    const {
+      title,
+      description,
+      courseId,
+      dueDate,
+    } = req.body;
+
+    // -----------------------------------------------
+    // VALIDATION
+    // -----------------------------------------------
+
+    if (!title?.trim()) {
+      if (req.file?.path) {
+        deleteLocalFile(req.file.path);
+      }
+
+      return res.status(400).json({
+        success: false,
+        message: "Assignment title is required",
+      });
     }
 
-    // ------------------------------------------
-    // Create assignment in MongoDB
-    // ------------------------------------------
+    if (!description?.trim()) {
+      if (req.file?.path) {
+        deleteLocalFile(req.file.path);
+      }
+
+      return res.status(400).json({
+        success: false,
+        message: "Assignment description is required",
+      });
+    }
+
+    if (!courseId) {
+      if (req.file?.path) {
+        deleteLocalFile(req.file.path);
+      }
+
+      return res.status(400).json({
+        success: false,
+        message: "Course is required",
+      });
+    }
+
+    if (!dueDate) {
+      if (req.file?.path) {
+        deleteLocalFile(req.file.path);
+      }
+
+      return res.status(400).json({
+        success: false,
+        message: "Due date is required",
+      });
+    }
+
+    // -----------------------------------------------
+    // CHECK COURSE
+    // -----------------------------------------------
+
+    const course = await Course.findById(courseId);
+
+    if (!course) {
+      if (req.file?.path) {
+        deleteLocalFile(req.file.path);
+      }
+
+      return res.status(404).json({
+        success: false,
+        message: "Course not found",
+      });
+    }
+
+    // -----------------------------------------------
+    // ADMIN ATTACHMENT
+    // -----------------------------------------------
+
+    let attachmentData = {
+      attachmentUrl: "",
+      attachmentPublicId: "",
+      attachmentName: "",
+      attachmentType: "",
+    };
+
+    if (req.file) {
+      const resourceType = getResourceType(
+        req.file.mimetype
+      );
+
+      try {
+        const result =
+          await cloudinary.uploader.upload(
+            req.file.path,
+            {
+              resource_type: resourceType,
+              folder: "assignments",
+              use_filename: true,
+              unique_filename: true,
+            }
+          );
+
+        attachmentData = {
+          attachmentUrl: result.secure_url,
+          attachmentPublicId: result.public_id,
+          attachmentName: req.file.originalname,
+          attachmentType: req.file.mimetype,
+        };
+      } finally {
+        deleteLocalFile(req.file.path);
+      }
+    }
+
+    // -----------------------------------------------
+    // CREATE ASSIGNMENT
+    // -----------------------------------------------
+
     const assignment = await Assignment.create({
-      student: req.user._id,
-      course: req.body.courseId,
+      title: title.trim(),
 
-      fileUrl: result.secure_url,
-      publicId: result.public_id,
+      description: description.trim(),
 
-      originalName: req.file.originalname,
-      fileType: req.file.mimetype,
+      course: courseId,
 
-      status: "pending",
-      feedback: "",
-      reviewedAt: null,
+      createdBy: req.user._id,
+
+      dueDate: new Date(dueDate),
+
+      ...attachmentData,
+
+      isActive: true,
     });
 
-    // ------------------------------------------
-    // Response
-    // ------------------------------------------
+    // -----------------------------------------------
+    // POPULATE RESPONSE
+    // -----------------------------------------------
+
+    await assignment.populate([
+      {
+        path: "course",
+        select: "title category",
+      },
+      {
+        path: "createdBy",
+        select: "name email",
+      },
+    ]);
+
     return res.status(201).json({
       success: true,
-      message: "Assignment submitted successfully",
+      message: "Assignment created successfully",
       assignment,
     });
   } catch (error) {
-    console.error("UPLOAD ASSIGNMENT ERROR:", error);
+    console.error(
+      "CREATE ASSIGNMENT ERROR:",
+      error
+    );
 
-    // ------------------------------------------
-    // Delete temporary file if something failed
-    // ------------------------------------------
-    if (
-      req.file?.path &&
-      fs.existsSync(req.file.path)
-    ) {
-      fs.unlinkSync(req.file.path);
+    if (req.file?.path) {
+      deleteLocalFile(req.file.path);
     }
 
     return res.status(500).json({
       success: false,
-      message: error.message || "Failed to upload assignment",
+      message:
+        error.message ||
+        "Failed to create assignment",
     });
   }
 };
 
-// ==========================================
-// ADMIN - GET ALL SUBMISSIONS
-// ==========================================
-exports.getAssignments = async (req, res) => {
-  try {
-    const assignments = await Assignment.find()
-      .populate("student", "name email")
-      .populate("course", "title")
-      .sort({ createdAt: -1 });
+// =====================================================
+// ADMIN - GET ALL ASSIGNMENTS
+// =====================================================
 
-    return res.status(200).json({
-      success: true,
-      count: assignments.length,
-      assignments,
-    });
-  } catch (error) {
-    console.error("GET ASSIGNMENTS ERROR:", error);
-
-    return res.status(500).json({
-      success: false,
-      message: error.message || "Failed to get assignments",
-    });
-  }
-};
-
-// ==========================================
-// STUDENT - GET OWN SUBMISSIONS
-// ==========================================
-exports.getMyAssignments = async (req, res) => {
+const getAssignments = async (req, res) => {
   try {
     const assignments = await Assignment.find({
-      student: req.user._id,
+      isActive: true,
     })
-      .populate("course", "title")
-      .sort({ createdAt: -1 });
+      .populate(
+        "course",
+        "title category students"
+      )
+      .populate(
+        "createdBy",
+        "name email"
+      )
+      .sort({
+        createdAt: -1,
+      })
+      .lean();
+
+    const assignmentIds = assignments.map(
+      (assignment) => assignment._id
+    );
+
+    const submissions =
+      await AssignmentSubmission.find({
+        assignment: {
+          $in: assignmentIds,
+        },
+      })
+        .populate(
+          "student",
+          "name email profileImage"
+        )
+        .sort({
+          createdAt: -1,
+        })
+        .lean();
+
+    const submissionMap = {};
+
+    submissions.forEach((submission) => {
+      const key =
+        submission.assignment.toString();
+
+      if (!submissionMap[key]) {
+        submissionMap[key] = [];
+      }
+
+      submissionMap[key].push(submission);
+    });
+
+    const result = assignments.map(
+      (assignment) => ({
+        ...assignment,
+
+        submissions:
+          submissionMap[
+            assignment._id.toString()
+          ] || [],
+      })
+    );
 
     return res.status(200).json({
       success: true,
-      count: assignments.length,
-      assignments,
+      count: result.length,
+      assignments: result,
     });
   } catch (error) {
-    console.error("GET MY ASSIGNMENTS ERROR:", error);
+    console.error(
+      "GET ASSIGNMENTS ERROR:",
+      error
+    );
 
     return res.status(500).json({
       success: false,
-      message: error.message || "Failed to get your assignments",
+      message:
+        error.message ||
+        "Failed to get assignments",
     });
   }
 };
 
-// ==========================================
-// ADMIN - APPROVE ASSIGNMENT
-// ==========================================
-exports.approveAssignment = async (req, res) => {
+// =====================================================
+// STUDENT - GET AVAILABLE ASSIGNMENTS
+// =====================================================
+
+const getAvailableAssignments = async (
+  req,
+  res
+) => {
+  try {
+    // -----------------------------------------------
+    // FIND COURSES WHERE STUDENT IS ENROLLED
+    // -----------------------------------------------
+
+    const courses = await Course.find({
+      students: req.user._id,
+    }).select("_id");
+
+    const courseIds = courses.map(
+      (course) => course._id
+    );
+
+    // -----------------------------------------------
+    // FIND ASSIGNMENTS FOR THOSE COURSES
+    // -----------------------------------------------
+
+    const assignments =
+      await Assignment.find({
+        course: {
+          $in: courseIds,
+        },
+
+        isActive: true,
+      })
+        .populate(
+          "course",
+          "title category"
+        )
+        .populate(
+          "createdBy",
+          "name email"
+        )
+        .sort({
+          dueDate: 1,
+          createdAt: -1,
+        })
+        .lean();
+
+    // -----------------------------------------------
+    // FIND CURRENT STUDENT SUBMISSIONS
+    // -----------------------------------------------
+
+    const assignmentIds =
+      assignments.map(
+        (assignment) => assignment._id
+      );
+
+    const submissions =
+      await AssignmentSubmission.find({
+        assignment: {
+          $in: assignmentIds,
+        },
+
+        student: req.user._id,
+      }).lean();
+
+    const submissionMap = {};
+
+    submissions.forEach((submission) => {
+      submissionMap[
+        submission.assignment.toString()
+      ] = submission;
+    });
+
+    // -----------------------------------------------
+    // ATTACH SUBMISSION TO ASSIGNMENT
+    // -----------------------------------------------
+
+    const result = assignments.map(
+      (assignment) => ({
+        ...assignment,
+
+        submission:
+          submissionMap[
+            assignment._id.toString()
+          ] || null,
+      })
+    );
+
+    return res.status(200).json({
+      success: true,
+      count: result.length,
+      assignments: result,
+    });
+  } catch (error) {
+    console.error(
+      "GET AVAILABLE ASSIGNMENTS ERROR:",
+      error
+    );
+
+    return res.status(500).json({
+      success: false,
+      message:
+        error.message ||
+        "Failed to get available assignments",
+    });
+  }
+};
+
+// =====================================================
+// STUDENT - GET MY ASSIGNMENTS
+// =====================================================
+
+const getMyAssignments = async (
+  req,
+  res
+) => {
+  try {
+    const submissions =
+      await AssignmentSubmission.find({
+        student: req.user._id,
+      })
+        .populate({
+          path: "assignment",
+          populate: [
+            {
+              path: "course",
+              select: "title category",
+            },
+            {
+              path: "createdBy",
+              select: "name email",
+            },
+          ],
+        })
+        .populate(
+          "student",
+          "name email profileImage"
+        )
+        .sort({
+          createdAt: -1,
+        });
+
+    return res.status(200).json({
+      success: true,
+      count: submissions.length,
+      assignments: submissions,
+      submissions,
+    });
+  } catch (error) {
+    console.error(
+      "GET MY ASSIGNMENTS ERROR:",
+      error
+    );
+
+    return res.status(500).json({
+      success: false,
+      message:
+        error.message ||
+        "Failed to get your assignments",
+    });
+  }
+};
+
+// =====================================================
+// STUDENT - GET SINGLE ASSIGNMENT
+// =====================================================
+
+const getAssignmentById = async (
+  req,
+  res
+) => {
   try {
     const { id } = req.params;
 
-    const assignment = await Assignment.findById(id);
+    const assignment =
+      await Assignment.findOne({
+        _id: id,
+        isActive: true,
+      })
+        .populate(
+          "course",
+          "title category students"
+        )
+        .populate(
+          "createdBy",
+          "name email"
+        )
+        .lean();
 
     if (!assignment) {
       return res.status(404).json({
         success: false,
-        message: "Assignment submission not found",
+        message: "Assignment not found",
       });
     }
 
-    assignment.status = "approved";
+    // -----------------------------------------------
+    // CHECK STUDENT ENROLLMENT
+    // -----------------------------------------------
 
-    assignment.feedback =
+    const isEnrolled =
+      assignment.course?.students?.some(
+        (studentId) =>
+          studentId.toString() ===
+          req.user._id.toString()
+      );
+
+    if (
+      req.user.role !== "admin" &&
+      !isEnrolled
+    ) {
+      return res.status(403).json({
+        success: false,
+        message:
+          "You are not enrolled in this course",
+      });
+    }
+
+    // -----------------------------------------------
+    // GET STUDENT SUBMISSION
+    // -----------------------------------------------
+
+    let submission = null;
+
+    if (req.user.role !== "admin") {
+      submission =
+        await AssignmentSubmission.findOne({
+          assignment: id,
+          student: req.user._id,
+        }).lean();
+    }
+
+    return res.status(200).json({
+      success: true,
+      assignment,
+      submission,
+    });
+  } catch (error) {
+    console.error(
+      "GET ASSIGNMENT BY ID ERROR:",
+      error
+    );
+
+    return res.status(500).json({
+      success: false,
+      message:
+        error.message ||
+        "Failed to get assignment",
+    });
+  }
+};
+
+// =====================================================
+// STUDENT - SUBMIT ASSIGNMENT
+// =====================================================
+
+const submitAssignment = async (
+  req,
+  res
+) => {
+  try {
+    const {
+      assignmentId,
+    } = req.params;
+
+    // -----------------------------------------------
+    // FILE CHECK
+    // -----------------------------------------------
+
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Assignment file is required",
+      });
+    }
+
+    // -----------------------------------------------
+    // FIND ASSIGNMENT
+    // -----------------------------------------------
+
+    const assignment =
+      await Assignment.findOne({
+        _id: assignmentId,
+        isActive: true,
+      });
+
+    if (!assignment) {
+      deleteLocalFile(req.file.path);
+
+      return res.status(404).json({
+        success: false,
+        message: "Assignment not found",
+      });
+    }
+
+    // -----------------------------------------------
+    // CHECK ENROLLMENT
+    // -----------------------------------------------
+
+    const course =
+      await Course.findById(
+        assignment.course
+      ).select("students title");
+
+    if (!course) {
+      deleteLocalFile(req.file.path);
+
+      return res.status(404).json({
+        success: false,
+        message:
+          "Assignment course not found",
+      });
+    }
+
+    const isEnrolled =
+      course.students.some(
+        (studentId) =>
+          studentId.toString() ===
+          req.user._id.toString()
+      );
+
+    if (!isEnrolled) {
+      deleteLocalFile(req.file.path);
+
+      return res.status(403).json({
+        success: false,
+        message:
+          "You are not enrolled in this course",
+      });
+    }
+
+    // -----------------------------------------------
+    // FIND EXISTING SUBMISSION
+    // -----------------------------------------------
+
+    const existingSubmission =
+      await AssignmentSubmission.findOne({
+        assignment: assignmentId,
+        student: req.user._id,
+      });
+
+    if (existingSubmission) {
+      if (
+        existingSubmission.status ===
+        "approved"
+      ) {
+        deleteLocalFile(req.file.path);
+
+        return res.status(400).json({
+          success: false,
+          message:
+            "Approved assignment cannot be resubmitted",
+        });
+      }
+
+      if (
+        existingSubmission.status ===
+        "pending"
+      ) {
+        deleteLocalFile(req.file.path);
+
+        return res.status(400).json({
+          success: false,
+          message:
+            "Your assignment is already under review",
+        });
+      }
+    }
+
+    // -----------------------------------------------
+    // UPLOAD NEW FILE
+    // -----------------------------------------------
+
+    const resourceType =
+      getResourceType(
+        req.file.mimetype
+      );
+
+    let result;
+
+    try {
+      result =
+        await cloudinary.uploader.upload(
+          req.file.path,
+          {
+            resource_type: resourceType,
+            folder:
+              "assignments/submissions",
+            use_filename: true,
+            unique_filename: true,
+          }
+        );
+    } finally {
+      deleteLocalFile(req.file.path);
+    }
+
+    // -----------------------------------------------
+    // REJECTED = RESUBMISSION
+    // -----------------------------------------------
+
+    if (existingSubmission) {
+      const oldPublicId =
+        existingSubmission.publicId;
+
+      const oldFileType =
+        existingSubmission.fileType;
+
+      existingSubmission.fileUrl =
+        result.secure_url;
+
+      existingSubmission.publicId =
+        result.public_id;
+
+      existingSubmission.originalName =
+        req.file.originalname;
+
+      existingSubmission.fileType =
+        req.file.mimetype;
+
+      existingSubmission.status =
+        "pending";
+
+      existingSubmission.feedback = "";
+
+      existingSubmission.reviewedAt =
+        null;
+
+      existingSubmission.submittedAt =
+        new Date();
+
+      await existingSubmission.save();
+
+      // Delete old file
+      if (oldPublicId) {
+        await deleteCloudinaryFile(
+          oldPublicId,
+          oldFileType
+        );
+      }
+
+      return res.status(200).json({
+        success: true,
+        message:
+          "Assignment resubmitted successfully",
+        submission: existingSubmission,
+      });
+    }
+
+    // -----------------------------------------------
+    // FIRST SUBMISSION
+    // -----------------------------------------------
+
+    const submission =
+      await AssignmentSubmission.create({
+        assignment: assignmentId,
+
+        student: req.user._id,
+
+        fileUrl: result.secure_url,
+
+        publicId: result.public_id,
+
+        originalName:
+          req.file.originalname,
+
+        fileType:
+          req.file.mimetype,
+
+        status: "pending",
+
+        feedback: "",
+
+        reviewedAt: null,
+
+        submittedAt: new Date(),
+      });
+
+    return res.status(201).json({
+      success: true,
+      message:
+        "Assignment submitted successfully",
+      submission,
+    });
+  } catch (error) {
+    console.error(
+      "SUBMIT ASSIGNMENT ERROR:",
+      error
+    );
+
+    if (req.file?.path) {
+      deleteLocalFile(req.file.path);
+    }
+
+    return res.status(500).json({
+      success: false,
+      message:
+        error.message ||
+        "Failed to submit assignment",
+    });
+  }
+};
+
+// =====================================================
+// STUDENT - UPDATE / RESUBMIT SUBMISSION
+// =====================================================
+
+const updateSubmission = async (
+  req,
+  res
+) => {
+  try {
+    const { id } = req.params;
+
+    // -----------------------------------------------
+    // FILE REQUIRED
+    // -----------------------------------------------
+
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Please select a new file",
+      });
+    }
+
+    // -----------------------------------------------
+    // FIND SUBMISSION
+    // -----------------------------------------------
+
+    const submission =
+      await AssignmentSubmission.findById(id);
+
+    if (!submission) {
+      deleteLocalFile(req.file.path);
+
+      return res.status(404).json({
+        success: false,
+        message:
+          "Submission not found",
+      });
+    }
+
+    // -----------------------------------------------
+    // SECURITY
+    // -----------------------------------------------
+
+    if (
+      submission.student.toString() !==
+      req.user._id.toString()
+    ) {
+      deleteLocalFile(req.file.path);
+
+      return res.status(403).json({
+        success: false,
+        message:
+          "You are not allowed to edit this submission",
+      });
+    }
+
+    // -----------------------------------------------
+    // STATUS CHECK
+    // -----------------------------------------------
+
+    if (
+      submission.status !== "pending" &&
+      submission.status !== "rejected"
+    ) {
+      deleteLocalFile(req.file.path);
+
+      return res.status(400).json({
+        success: false,
+        message:
+          "Only pending or rejected submissions can be edited",
+      });
+    }
+
+    // -----------------------------------------------
+    // UPLOAD NEW FILE
+    // -----------------------------------------------
+
+    const newResourceType =
+      getResourceType(
+        req.file.mimetype
+      );
+
+    let result;
+
+    try {
+      result =
+        await cloudinary.uploader.upload(
+          req.file.path,
+          {
+            resource_type:
+              newResourceType,
+            folder:
+              "assignments/submissions",
+            use_filename: true,
+            unique_filename: true,
+          }
+        );
+    } finally {
+      deleteLocalFile(req.file.path);
+    }
+
+    // -----------------------------------------------
+    // OLD CLOUDINARY FILE
+    // -----------------------------------------------
+
+    const oldPublicId =
+      submission.publicId;
+
+    const oldFileType =
+      submission.fileType;
+
+    // -----------------------------------------------
+    // UPDATE SUBMISSION
+    // -----------------------------------------------
+
+    submission.fileUrl =
+      result.secure_url;
+
+    submission.publicId =
+      result.public_id;
+
+    submission.originalName =
+      req.file.originalname;
+
+    submission.fileType =
+      req.file.mimetype;
+
+    submission.status =
+      "pending";
+
+    submission.feedback = "";
+
+    submission.reviewedAt =
+      null;
+
+    submission.submittedAt =
+      new Date();
+
+    await submission.save();
+
+    // -----------------------------------------------
+    // DELETE OLD FILE
+    // -----------------------------------------------
+
+    if (oldPublicId) {
+      await deleteCloudinaryFile(
+        oldPublicId,
+        oldFileType
+      );
+    }
+
+    return res.status(200).json({
+      success: true,
+      message:
+        "Assignment resubmitted successfully",
+      submission,
+    });
+  } catch (error) {
+    console.error(
+      "UPDATE SUBMISSION ERROR:",
+      error
+    );
+
+    if (req.file?.path) {
+      deleteLocalFile(req.file.path);
+    }
+
+    return res.status(500).json({
+      success: false,
+      message:
+        error.message ||
+        "Failed to update submission",
+    });
+  }
+};
+
+// =====================================================
+// STUDENT - DELETE SUBMISSION
+// =====================================================
+
+const deleteSubmission = async (
+  req,
+  res
+) => {
+  try {
+    const { id } = req.params;
+
+    const submission =
+      await AssignmentSubmission.findById(id);
+
+    if (!submission) {
+      return res.status(404).json({
+        success: false,
+        message:
+          "Submission not found",
+      });
+    }
+
+    // -----------------------------------------------
+    // SECURITY
+    // -----------------------------------------------
+
+    if (
+      submission.student.toString() !==
+      req.user._id.toString()
+    ) {
+      return res.status(403).json({
+        success: false,
+        message:
+          "You are not allowed to delete this submission",
+      });
+    }
+
+    // -----------------------------------------------
+    // STATUS CHECK
+    // -----------------------------------------------
+
+    if (
+      submission.status !== "pending" &&
+      submission.status !== "rejected"
+    ) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Approved submissions cannot be deleted",
+      });
+    }
+
+    // -----------------------------------------------
+    // DELETE CLOUDINARY FILE
+    // -----------------------------------------------
+
+    if (submission.publicId) {
+      await deleteCloudinaryFile(
+        submission.publicId,
+        submission.fileType
+      );
+    }
+
+    // -----------------------------------------------
+    // DELETE DATABASE RECORD
+    // -----------------------------------------------
+
+    await AssignmentSubmission.findByIdAndDelete(
+      id
+    );
+
+    return res.status(200).json({
+      success: true,
+      message:
+        "Submission deleted successfully",
+    });
+  } catch (error) {
+    console.error(
+      "DELETE SUBMISSION ERROR:",
+      error
+    );
+
+    return res.status(500).json({
+      success: false,
+      message:
+        error.message ||
+        "Failed to delete submission",
+    });
+  }
+};
+
+// =====================================================
+// ADMIN - APPROVE SUBMISSION
+// =====================================================
+
+const approveSubmission = async (
+  req,
+  res
+) => {
+  try {
+    const { id } = req.params;
+
+    const submission =
+      await AssignmentSubmission.findById(
+        id
+      );
+
+    if (!submission) {
+      return res.status(404).json({
+        success: false,
+        message:
+          "Submission not found",
+      });
+    }
+
+    // -----------------------------------------------
+    // ONLY PENDING
+    // -----------------------------------------------
+
+    if (
+      submission.status !== "pending"
+    ) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Only pending submissions can be approved",
+      });
+    }
+
+    submission.status =
+      "approved";
+
+    submission.feedback =
       req.body.feedback?.trim() ||
       "Assignment approved";
 
-    assignment.reviewedAt = new Date();
+    submission.reviewedAt =
+      new Date();
 
-    await assignment.save();
+    await submission.save();
 
-    return res.status(200).json({
-      success: true,
-      message: "Assignment approved successfully",
-      assignment,
-    });
-  } catch (error) {
-    console.error("APPROVE ASSIGNMENT ERROR:", error);
-
-    return res.status(500).json({
-      success: false,
-      message: error.message || "Failed to approve assignment",
-    });
-  }
-};
-
-// ==========================================
-// ADMIN - REJECT ASSIGNMENT
-// ==========================================
-exports.rejectAssignment = async (req, res) => {
-  try {
-    const { id } = req.params;
-
-    const assignment = await Assignment.findById(id);
-
-    if (!assignment) {
-      return res.status(404).json({
-        success: false,
-        message: "Assignment submission not found",
-      });
-    }
-
-    assignment.status = "rejected";
-
-    assignment.feedback =
-      req.body.feedback?.trim() ||
-      "Assignment rejected";
-
-    assignment.reviewedAt = new Date();
-
-    await assignment.save();
-
-    return res.status(200).json({
-      success: true,
-      message: "Assignment rejected successfully",
-      assignment,
-    });
-  } catch (error) {
-    console.error("REJECT ASSIGNMENT ERROR:", error);
-
-    return res.status(500).json({
-      success: false,
-      message: error.message || "Failed to reject assignment",
-    });
-  }
-};
-// STUDENT - UPDATE / REPLACE ASSIGNMENT
-exports.updateAssignment = async (req, res) => {
-  try {
-    const { id } = req.params;
-
-    // Assignment find karo
-    const assignment = await Assignment.findById(id);
-
-    if (!assignment) {
-      return res.status(404).json({
-        success: false,
-        message: "Assignment not found",
-      });
-    }
-
-    // Security: sirf jis student ne submit ki hai wahi edit kare
-    if (assignment.student.toString() !== req.user._id.toString()) {
-      return res.status(403).json({
-        success: false,
-        message: "You are not allowed to edit this assignment",
-      });
-    }
-
-    // Approved/rejected assignment ko edit na karne dein
-    if (assignment.status !== "pending") {
-      return res.status(400).json({
-        success: false,
-        message: "Only pending assignments can be edited",
-      });
-    }
-
-    // New file required
-    if (!req.file) {
-      return res.status(400).json({
-        success: false,
-        message: "Please select a new file",
-      });
-    }
-
-    // New file ka resource type
-    let resourceType = "raw";
-
-    const imageTypes = [
-      "application/pdf",
-      "image/png",
-      "image/jpg",
-      "image/jpeg",
-    ];
-
-    if (imageTypes.includes(req.file.mimetype)) {
-      resourceType = "image";
-    }
-
-    // New file Cloudinary par upload
-    const result = await cloudinary.uploader.upload(
-      req.file.path,
+    await submission.populate([
       {
-        resource_type: resourceType,
-        folder: "assignments",
-        use_filename: true,
-        unique_filename: true,
-      }
+        path: "assignment",
+        populate: {
+          path: "course",
+          select: "title",
+        },
+      },
+      {
+        path: "student",
+        select: "name email",
+      },
+    ]);
+
+    return res.status(200).json({
+      success: true,
+      message:
+        "Assignment approved successfully",
+      submission,
+    });
+  } catch (error) {
+    console.error(
+      "APPROVE SUBMISSION ERROR:",
+      error
     );
 
-    // Local temporary file delete
-    const fs = require("fs");
-
-    if (fs.existsSync(req.file.path)) {
-      fs.unlinkSync(req.file.path);
-    }
-
-    // Old Cloudinary file delete
-    if (assignment.publicId) {
-      try {
-        let oldResourceType = "raw";
-
-        if (
-          assignment.fileType === "application/pdf" ||
-          assignment.fileType === "image/png" ||
-          assignment.fileType === "image/jpg" ||
-          assignment.fileType === "image/jpeg"
-        ) {
-          oldResourceType = "image";
-        }
-
-        await cloudinary.uploader.destroy(
-          assignment.publicId,
-          {
-            resource_type: oldResourceType,
-            type: "upload",
-          }
-        );
-      } catch (deleteError) {
-        console.error(
-          "OLD CLOUDINARY FILE DELETE ERROR:",
-          deleteError.message
-        );
-      }
-    }
-
-    // Database update
-    assignment.fileUrl = result.secure_url;
-    assignment.publicId = result.public_id;
-    assignment.originalName = req.file.originalname;
-    assignment.fileType = req.file.mimetype;
-
-    // Edit karne ke baad status dobara pending
-    assignment.status = "pending";
-    assignment.feedback = "";
-    assignment.reviewedAt = null;
-
-    await assignment.save();
-
-    return res.status(200).json({
-      success: true,
-      message: "Assignment updated successfully",
-      assignment,
-    });
-  } catch (error) {
-    console.error("UPDATE ASSIGNMENT ERROR:", error);
-
     return res.status(500).json({
       success: false,
-      message: error.message,
+      message:
+        error.message ||
+        "Failed to approve submission",
     });
   }
 };
 
+// =====================================================
+// ADMIN - REJECT SUBMISSION
+// =====================================================
 
-// STUDENT - DELETE ASSIGNMENT
-exports.deleteAssignment = async (req, res) => {
+const rejectSubmission = async (
+  req,
+  res
+) => {
   try {
     const { id } = req.params;
 
-    const assignment = await Assignment.findById(id);
+    const submission =
+      await AssignmentSubmission.findById(
+        id
+      );
+
+    if (!submission) {
+      return res.status(404).json({
+        success: false,
+        message:
+          "Submission not found",
+      });
+    }
+
+    // -----------------------------------------------
+    // ONLY PENDING
+    // -----------------------------------------------
+
+    if (
+      submission.status !== "pending"
+    ) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Only pending submissions can be rejected",
+      });
+    }
+
+    const feedback =
+      req.body.feedback?.trim();
+
+    submission.status =
+      "rejected";
+
+    submission.feedback =
+      feedback ||
+      "Assignment rejected. Please resubmit.";
+
+    submission.reviewedAt =
+      new Date();
+
+    await submission.save();
+
+    await submission.populate([
+      {
+        path: "assignment",
+        populate: {
+          path: "course",
+          select: "title",
+        },
+      },
+      {
+        path: "student",
+        select: "name email",
+      },
+    ]);
+
+    return res.status(200).json({
+      success: true,
+      message:
+        "Assignment rejected successfully",
+      submission,
+    });
+  } catch (error) {
+    console.error(
+      "REJECT SUBMISSION ERROR:",
+      error
+    );
+
+    return res.status(500).json({
+      success: false,
+      message:
+        error.message ||
+        "Failed to reject submission",
+    });
+  }
+};
+
+// =====================================================
+// ADMIN - DELETE ASSIGNMENT
+// =====================================================
+
+const deleteAssignment = async (
+  req,
+  res
+) => {
+  try {
+    const { id } = req.params;
+
+    // -----------------------------------------------
+    // FIND ASSIGNMENT
+    // -----------------------------------------------
+
+    const assignment =
+      await Assignment.findById(id);
 
     if (!assignment) {
       return res.status(404).json({
@@ -387,64 +1292,89 @@ exports.deleteAssignment = async (req, res) => {
       });
     }
 
-    // Security: sirf owner delete kar sakta hai
-    if (assignment.student.toString() !== req.user._id.toString()) {
-      return res.status(403).json({
-        success: false,
-        message: "You are not allowed to delete this assignment",
-      });
+    // -----------------------------------------------
+    // DELETE ADMIN ATTACHMENT
+    // -----------------------------------------------
+
+    if (assignment.attachmentPublicId) {
+      await deleteCloudinaryFile(
+        assignment.attachmentPublicId,
+        assignment.attachmentType
+      );
     }
 
-    // Approved/rejected assignment delete na karne dein
-    if (assignment.status !== "pending") {
-      return res.status(400).json({
-        success: false,
-        message: "Only pending assignments can be removed",
+    // -----------------------------------------------
+    // FIND ALL SUBMISSIONS
+    // -----------------------------------------------
+
+    const submissions =
+      await AssignmentSubmission.find({
+        assignment: id,
       });
-    }
 
-    // Cloudinary file delete
-    if (assignment.publicId) {
-      try {
-        let resourceType = "raw";
+    // -----------------------------------------------
+    // DELETE STUDENT SUBMISSION FILES
+    // -----------------------------------------------
 
-        if (
-          assignment.fileType === "application/pdf" ||
-          assignment.fileType === "image/png" ||
-          assignment.fileType === "image/jpg" ||
-          assignment.fileType === "image/jpeg"
-        ) {
-          resourceType = "image";
-        }
-
-        await cloudinary.uploader.destroy(
-          assignment.publicId,
-          {
-            resource_type: resourceType,
-            type: "upload",
-          }
-        );
-      } catch (cloudinaryError) {
-        console.error(
-          "CLOUDINARY DELETE ERROR:",
-          cloudinaryError.message
+    for (const submission of submissions) {
+      if (submission.publicId) {
+        await deleteCloudinaryFile(
+          submission.publicId,
+          submission.fileType
         );
       }
     }
 
-    // Database se assignment delete
+    // -----------------------------------------------
+    // DELETE ALL SUBMISSIONS
+    // -----------------------------------------------
+
+    await AssignmentSubmission.deleteMany({
+      assignment: id,
+    });
+
+    // -----------------------------------------------
+    // DELETE ASSIGNMENT
+    // -----------------------------------------------
+
     await Assignment.findByIdAndDelete(id);
 
     return res.status(200).json({
       success: true,
-      message: "Assignment removed successfully",
+      message:
+        "Assignment deleted successfully",
     });
   } catch (error) {
-    console.error("DELETE ASSIGNMENT ERROR:", error);
+    console.error(
+      "DELETE ASSIGNMENT ERROR:",
+      error
+    );
 
     return res.status(500).json({
       success: false,
-      message: error.message,
+      message:
+        error.message ||
+        "Failed to delete assignment",
     });
   }
+};
+
+// =====================================================
+// EXPORTS
+// =====================================================
+
+module.exports = {
+  createAssignment,
+  getAssignments,
+  getAvailableAssignments,
+  getMyAssignments,
+  getAssignmentById,
+  submitAssignment,
+  updateSubmission,
+  deleteSubmission,
+  approveSubmission,
+  rejectSubmission,
+
+  // IMPORTANT
+  deleteAssignment,
 };

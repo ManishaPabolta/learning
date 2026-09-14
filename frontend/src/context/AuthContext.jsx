@@ -36,6 +36,11 @@ export const AuthProvider = ({ children }) => {
     return getUser();
   });
 
+  // Access token ko state mein rakhenge
+  const [accessToken, setAccessTokenState] = useState(() => {
+    return getAccessToken();
+  });
+
   const [isAuthenticated, setIsAuthenticated] =
     useState(() => {
       return Boolean(getAccessToken());
@@ -59,7 +64,9 @@ export const AuthProvider = ({ children }) => {
 
   const saveUser = (userData) => {
     setUserState(userData);
+
     setUser(userData);
+
     setIsAuthenticated(true);
   };
 
@@ -97,7 +104,6 @@ export const AuthProvider = ({ children }) => {
       setOtpData(response);
 
       return response;
-
     } catch (error) {
       const message = getErrorMessage(
         error,
@@ -106,11 +112,7 @@ export const AuthProvider = ({ children }) => {
 
       setAuthError(message);
 
-      // IMPORTANT:
-      // Error throw karna zaroori hai
-      // taaki Signup.jsx ka catch chale
       throw new Error(message);
-
     } finally {
       setIsSubmitting(false);
     }
@@ -154,7 +156,6 @@ export const AuthProvider = ({ children }) => {
       setOtpData(null);
 
       return response;
-
     } catch (error) {
       const message = getErrorMessage(
         error,
@@ -164,7 +165,6 @@ export const AuthProvider = ({ children }) => {
       setAuthError(message);
 
       throw new Error(message);
-
     } finally {
       setIsSubmitting(false);
     }
@@ -194,32 +194,49 @@ export const AuthProvider = ({ children }) => {
           password,
         });
 
-      // Check access token
+      // ==================================================
+      // CHECK ACCESS TOKEN
+      // ==================================================
+
       if (!response?.accessToken) {
         throw new Error(
           "Access token was not received."
         );
       }
 
-      // Save access token
+      // ==================================================
+      // SAVE ACCESS TOKEN
+      // ==================================================
+
       setAccessToken(
         response.accessToken
       );
 
-      // Save refresh token
+      // IMPORTANT:
+      // Update React state also
+      setAccessTokenState(
+        response.accessToken
+      );
+
+      // ==================================================
+      // SAVE REFRESH TOKEN
+      // ==================================================
+
       if (response.refreshToken) {
         setRefreshToken(
           response.refreshToken
         );
       }
 
-      // Save user
+      // ==================================================
+      // SAVE USER
+      // ==================================================
+
       if (response.user) {
         saveUser(response.user);
       }
 
       return response;
-
     } catch (error) {
       const message = getErrorMessage(
         error,
@@ -229,7 +246,6 @@ export const AuthProvider = ({ children }) => {
       setAuthError(message);
 
       throw new Error(message);
-
     } finally {
       setIsSubmitting(false);
     }
@@ -246,16 +262,17 @@ export const AuthProvider = ({ children }) => {
       if (getAccessToken()) {
         await logoutUserApi();
       }
-
     } catch (error) {
       console.error(
         "Logout API Error:",
         error
       );
-
     } finally {
+      // Clear storage
       clearAuthStorage();
 
+      // Clear React state
+      setAccessTokenState(null);
       setUserState(null);
       setIsAuthenticated(false);
 
@@ -279,11 +296,15 @@ export const AuthProvider = ({ children }) => {
       if (response?.user) {
         saveUser(response.user);
 
+        // Make sure token state is also updated
+        setAccessTokenState(
+          getAccessToken()
+        );
+
         return response.user;
       }
 
       return null;
-
     } catch (error) {
       console.error(
         "Unable to refresh user:",
@@ -300,16 +321,25 @@ export const AuthProvider = ({ children }) => {
 
   useEffect(() => {
     const initializeAuth = async () => {
-      const accessToken =
+      const storedAccessToken =
         getAccessToken();
 
       const refreshToken =
         getRefreshToken();
 
+      // Keep token in React state
+      setAccessTokenState(
+        storedAccessToken
+      );
+
       // No token
-      if (!accessToken && !refreshToken) {
+      if (
+        !storedAccessToken &&
+        !refreshToken
+      ) {
         setIsAuthenticated(false);
         setIsLoading(false);
+
         return;
       }
 
@@ -319,13 +349,18 @@ export const AuthProvider = ({ children }) => {
 
         if (response?.user) {
           saveUser(response.user);
+
+          // Update token again
+          setAccessTokenState(
+            getAccessToken()
+          );
         } else {
           clearAuthStorage();
 
+          setAccessTokenState(null);
           setUserState(null);
           setIsAuthenticated(false);
         }
-
       } catch (error) {
         console.error(
           "Authentication initialization failed:",
@@ -334,9 +369,9 @@ export const AuthProvider = ({ children }) => {
 
         clearAuthStorage();
 
+        setAccessTokenState(null);
         setUserState(null);
         setIsAuthenticated(false);
-
       } finally {
         setIsLoading(false);
       }
@@ -350,28 +385,58 @@ export const AuthProvider = ({ children }) => {
   // ==================================================
 
   const value = {
-    // User
+    // ==================================================
+    // USER
+    // ==================================================
+
     user,
+
     setUser: saveUser,
 
-    // Authentication
+    // ==================================================
+    // AUTHENTICATION
+    // ==================================================
+
     isAuthenticated,
+
     isLoading,
+
     isSubmitting,
 
-    // Error
+    // ==================================================
+    // ACCESS TOKEN
+    // ==================================================
+
+    accessToken,
+
+    // ==================================================
+    // ERROR
+    // ==================================================
+
     authError,
+
     clearAuthError,
 
-    // Registration
+    // ==================================================
+    // REGISTRATION
+    // ==================================================
+
     registrationData,
+
     otpData,
 
-    // Methods
+    // ==================================================
+    // METHODS
+    // ==================================================
+
     sendOTP,
+
     verifyOTP,
+
     login,
+
     logout,
+
     refreshUser,
   };
 
@@ -387,7 +452,8 @@ export const AuthProvider = ({ children }) => {
 // ==================================================
 
 export const useAuth = () => {
-  const context = useContext(AuthContext);
+  const context =
+    useContext(AuthContext);
 
   if (!context) {
     throw new Error(

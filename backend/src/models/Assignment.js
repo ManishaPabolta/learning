@@ -2,10 +2,16 @@ const mongoose = require("mongoose");
 
 const assignmentSchema = new mongoose.Schema(
   {
-    student: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "User",
+    title: {
+      type: String,
       required: true,
+      trim: true,
+    },
+
+    description: {
+      type: String,
+      required: true,
+      trim: true,
     },
 
     course: {
@@ -14,43 +20,40 @@ const assignmentSchema = new mongoose.Schema(
       required: true,
     },
 
-    fileUrl: {
-      type: String,
+    createdBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
       required: true,
     },
 
-    publicId: {
-      type: String,
+    dueDate: {
+      type: Date,
       required: true,
     },
 
-    originalName: {
-      type: String,
-      required: true,
-    },
-
-    fileType: {
-      type: String,
-      required: true,
-    },
-
-    // Admin review status
-    status: {
-      type: String,
-      enum: ["pending", "approved", "rejected"],
-      default: "pending",
-    },
-
-    // Admin feedback
-    feedback: {
+    attachmentUrl: {
       type: String,
       default: "",
     },
 
-    // When admin reviewed
-    reviewedAt: {
-      type: Date,
-      default: null,
+    attachmentPublicId: {
+      type: String,
+      default: "",
+    },
+
+    attachmentName: {
+      type: String,
+      default: "",
+    },
+
+    attachmentType: {
+      type: String,
+      default: "",
+    },
+
+    isActive: {
+      type: Boolean,
+      default: true,
     },
   },
   {
@@ -58,4 +61,7 @@ const assignmentSchema = new mongoose.Schema(
   }
 );
 
-module.exports = mongoose.model("Assignment", assignmentSchema);
+module.exports = mongoose.model(
+  "Assignment",
+  assignmentSchema
+);

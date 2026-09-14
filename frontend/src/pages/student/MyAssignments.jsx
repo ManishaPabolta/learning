@@ -13,6 +13,10 @@ import {
   Loader2,
   Plus,
   Sparkles,
+  CalendarDays,
+  BookOpen,
+  AlertCircle,
+  ClipboardCheck,
 } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 
@@ -24,11 +28,7 @@ const MyAssignments = () => {
   const [assignments, setAssignments] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // ==========================================
-  // EDIT MODAL
-  // ==========================================
-
-  const [editingAssignment, setEditingAssignment] =
+  const [editingSubmission, setEditingSubmission] =
     useState(null);
 
   const [selectedFile, setSelectedFile] =
@@ -41,48 +41,57 @@ const MyAssignments = () => {
   // FETCH MY ASSIGNMENTS
   // ==========================================
 
-  const fetchAssignments = async () => {
-    try {
-      setLoading(true);
+ const fetchAssignments = async () => {
+  try {
+    setLoading(true);
 
-      const response = await api.get("/assignments/my");
+    const response = await api.get(
+      "/assignments/available"
+    );
 
-      if (response.data?.success) {
-        setAssignments(
-          Array.isArray(response.data.assignments)
-            ? response.data.assignments
-            : []
-        );
-      } else {
-        setAssignments([]);
-      }
-    } catch (error) {
-      console.error(
-        "GET MY ASSIGNMENTS ERROR:",
-        error
+    console.log(
+      "AVAILABLE ASSIGNMENTS:",
+      response.data
+    );
+
+    if (response.data?.success) {
+      setAssignments(
+        Array.isArray(response.data.assignments)
+          ? response.data.assignments
+          : []
       );
-
+    } else {
       setAssignments([]);
-
-      alert(
-        error.response?.data?.message ||
-          "Failed to load assignments."
-      );
-    } finally {
-      setLoading(false);
     }
-  };
+  } catch (error) {
+    console.error(
+      "GET AVAILABLE ASSIGNMENTS ERROR:",
+      error
+    );
+
+    setAssignments([]);
+
+    alert(
+      error.response?.data?.message ||
+        "Failed to load assignments."
+    );
+  } finally {
+    setLoading(false);
+  }
+};
 
   useEffect(() => {
     fetchAssignments();
   }, []);
 
   // ==========================================
-  // OPEN SUBMIT ASSIGNMENT PAGE
+  // SUBMIT
   // ==========================================
 
   const handleSubmitAssignment = () => {
-    navigate("/student/assignments/submit");
+    navigate(
+      "/student/assignments/submit"
+    );
   };
 
   // ==========================================
@@ -90,9 +99,7 @@ const MyAssignments = () => {
   // ==========================================
 
   const validateFile = (file) => {
-    if (!file) {
-      return false;
-    }
+    if (!file) return false;
 
     const allowedTypes = [
       "application/pdf",
@@ -103,11 +110,27 @@ const MyAssignments = () => {
       "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     ];
 
+    const allowedExtensions = [
+      ".pdf",
+      ".png",
+      ".jpg",
+      ".jpeg",
+      ".doc",
+      ".docx",
+    ];
+
     const maxSize = 10 * 1024 * 1024;
 
-    if (!allowedTypes.includes(file.type)) {
+    const extension = file.name
+      .toLowerCase()
+      .slice(file.name.lastIndexOf("."));
+
+    if (
+      !allowedTypes.includes(file.type) &&
+      !allowedExtensions.includes(extension)
+    ) {
       alert(
-        "Invalid file type.\n\nOnly PDF, JPG, JPEG, PNG, DOC and DOCX files are allowed."
+        "Only PDF, JPG, JPEG, PNG, DOC and DOCX files are allowed."
       );
 
       return false;
@@ -115,7 +138,7 @@ const MyAssignments = () => {
 
     if (file.size > maxSize) {
       alert(
-        "File size must be less than 10MB."
+        "File size must be less than or equal to 10 MB."
       );
 
       return false;
@@ -125,43 +148,43 @@ const MyAssignments = () => {
   };
 
   // ==========================================
-  // CHECK EDIT / DELETE
+  // CAN MODIFY
   // ==========================================
 
-  const canModifyAssignment = (assignment) => {
+  const canModifySubmission = (assignment) => {
+    const status =
+      assignment.submission?.status;
+
     return (
-      assignment.status === "pending" ||
-      assignment.status === "rejected"
+      status === "pending" ||
+      status === "rejected"
     );
   };
 
   // ==========================================
-  // OPEN EDIT MODAL
+  // EDIT
   // ==========================================
 
   const handleEditClick = (assignment) => {
-    if (!canModifyAssignment(assignment)) {
+    if (!canModifySubmission(assignment)) {
       alert(
-        "Only pending or rejected assignments can be edited."
+        "Only pending or rejected submissions can be edited."
       );
-
       return;
     }
 
-    setEditingAssignment(assignment);
+    setEditingSubmission(assignment);
     setSelectedFile(null);
   };
 
   // ==========================================
-  // SELECT NEW FILE
+  // FILE CHANGE
   // ==========================================
 
   const handleFileChange = (event) => {
     const file = event.target.files?.[0];
 
-    if (!file) {
-      return;
-    }
+    if (!file) return;
 
     if (!validateFile(file)) {
       event.target.value = "";
@@ -172,16 +195,24 @@ const MyAssignments = () => {
   };
 
   // ==========================================
-  // UPDATE ASSIGNMENT
+  // UPDATE SUBMISSION
   // ==========================================
 
-  const handleUpdateAssignment = async () => {
-    if (!editingAssignment) {
+  const handleUpdateSubmission = async () => {
+    if (!editingSubmission) return;
+
+    if (!selectedFile) {
+      alert("Please select a new file.");
       return;
     }
 
-    if (!selectedFile) {
-      alert("Please select a new file first.");
+    const submissionId =
+      editingSubmission.submission?._id;
+
+    if (!submissionId) {
+      alert(
+        "Submission not found."
+      );
       return;
     }
 
@@ -190,42 +221,46 @@ const MyAssignments = () => {
 
       const formData = new FormData();
 
-      formData.append("file", selectedFile);
+      formData.append(
+        "file",
+        selectedFile
+      );
 
       const response = await api.put(
-        `/assignments/${editingAssignment._id}`,
+        `/assignments/submissions/${submissionId}`,
         formData,
         {
           headers: {
-            "Content-Type": "multipart/form-data",
+            "Content-Type":
+              "multipart/form-data",
           },
         }
       );
 
       if (response.data?.success) {
         alert(
-          "Assignment updated successfully!\n\nYour assignment has been sent for review again."
+          "Assignment updated successfully!\n\nYour submission has been sent for review again."
         );
 
-        setEditingAssignment(null);
+        setEditingSubmission(null);
         setSelectedFile(null);
 
         await fetchAssignments();
       } else {
         alert(
           response.data?.message ||
-            "Failed to update assignment."
+            "Failed to update submission."
         );
       }
     } catch (error) {
       console.error(
-        "UPDATE ASSIGNMENT ERROR:",
+        "UPDATE SUBMISSION ERROR:",
         error
       );
 
       alert(
         error.response?.data?.message ||
-          "Failed to update assignment."
+          "Failed to update submission."
       );
     } finally {
       setUpdating(false);
@@ -233,57 +268,63 @@ const MyAssignments = () => {
   };
 
   // ==========================================
-  // DELETE ASSIGNMENT
+  // DELETE
   // ==========================================
 
-  const handleDeleteAssignment = async (assignment) => {
-    if (!canModifyAssignment(assignment)) {
+  const handleDeleteSubmission = async (
+    assignment
+  ) => {
+    if (!canModifySubmission(assignment)) {
       alert(
-        "Only pending or rejected assignments can be removed."
+        "Only pending or rejected submissions can be removed."
       );
+      return;
+    }
 
+    const submission =
+      assignment.submission;
+
+    if (!submission?._id) {
+      alert(
+        "No submission found."
+      );
       return;
     }
 
     const confirmed = window.confirm(
-      `Are you sure you want to remove "${assignment.originalName}"?\n\nThis action cannot be undone.`
+      `Are you sure you want to remove "${submission.originalName}"?\n\nThis action cannot be undone.`
     );
 
-    if (!confirmed) {
-      return;
-    }
+    if (!confirmed) return;
 
     try {
-      setDeletingId(assignment._id);
+      setDeletingId(submission._id);
 
       const response = await api.delete(
-        `/assignments/${assignment._id}`
+        `/assignments/submissions/${submission._id}`
       );
 
       if (response.data?.success) {
-        alert("Assignment removed successfully!");
-
-        setAssignments((previousAssignments) =>
-          previousAssignments.filter(
-            (item) =>
-              item._id !== assignment._id
-          )
+        alert(
+          "Submission removed successfully!"
         );
+
+        await fetchAssignments();
       } else {
         alert(
           response.data?.message ||
-            "Failed to remove assignment."
+            "Failed to remove submission."
         );
       }
     } catch (error) {
       console.error(
-        "DELETE ASSIGNMENT ERROR:",
+        "DELETE SUBMISSION ERROR:",
         error
       );
 
       alert(
         error.response?.data?.message ||
-          "Failed to remove assignment."
+          "Failed to remove submission."
       );
     } finally {
       setDeletingId(null);
@@ -291,20 +332,18 @@ const MyAssignments = () => {
   };
 
   // ==========================================
-  // CLOSE EDIT MODAL
+  // CLOSE MODAL
   // ==========================================
 
   const closeEditModal = () => {
-    if (updating) {
-      return;
-    }
+    if (updating) return;
 
-    setEditingAssignment(null);
+    setEditingSubmission(null);
     setSelectedFile(null);
   };
 
   // ==========================================
-  // STATUS UI
+  // STATUS
   // ==========================================
 
   const getStatus = (status) => {
@@ -327,7 +366,7 @@ const MyAssignments = () => {
 
       default:
         return {
-          label: "Pending",
+          label: "Pending Review",
           icon: Clock3,
           className:
             "bg-amber-50 text-amber-700 ring-1 ring-amber-200",
@@ -336,13 +375,11 @@ const MyAssignments = () => {
   };
 
   // ==========================================
-  // FORMAT DATE
+  // DATE
   // ==========================================
 
   const formatDate = (date) => {
-    if (!date) {
-      return "—";
-    }
+    if (!date) return "—";
 
     try {
       return new Date(date).toLocaleDateString(
@@ -359,14 +396,24 @@ const MyAssignments = () => {
   };
 
   // ==========================================
+  // DUE DATE CHECK
+  // ==========================================
+
+  const isOverdue = (dueDate) => {
+    if (!dueDate) return false;
+
+    return new Date(dueDate) < new Date();
+  };
+
+  // ==========================================
   // LOADING
   // ==========================================
 
   if (loading) {
     return (
       <div className="relative flex min-h-[60vh] items-center justify-center overflow-hidden bg-gradient-to-br from-emerald-50 via-white to-green-50">
-        {/* Ambient glow */}
         <div className="pointer-events-none absolute -left-20 top-10 h-64 w-64 rounded-full bg-emerald-400/10 blur-3xl" />
+
         <div className="pointer-events-none absolute -right-20 bottom-10 h-64 w-64 rounded-full bg-lime-400/10 blur-3xl" />
 
         <div className="relative flex flex-col items-center gap-4">
@@ -379,7 +426,7 @@ const MyAssignments = () => {
               repeat: Infinity,
               ease: "easeInOut",
             }}
-            className="flex h-16 w-16 items-center justify-center rounded-2xl border border-emerald-100 bg-white shadow-xl shadow-emerald-900/10"
+            className="flex h-16 w-16 items-center justify-center rounded-2xl border border-emerald-100 bg-white shadow-xl"
           >
             <Loader2 className="h-8 w-8 animate-spin text-emerald-600" />
           </motion.div>
@@ -393,69 +440,26 @@ const MyAssignments = () => {
   }
 
   // ==========================================
-  // MAIN UI
+  // UI
   // ==========================================
 
   return (
     <>
       <div className="relative min-h-full overflow-hidden bg-gradient-to-br from-emerald-50 via-white to-green-50 px-1 py-2 text-slate-900 sm:px-2">
 
-        {/* =====================================
-            AMBIENT BACKGROUND
-        ===================================== */}
+        {/* BACKGROUND */}
 
         <div className="pointer-events-none absolute inset-0 overflow-hidden">
           <div className="absolute -left-24 top-10 h-72 w-72 rounded-full bg-emerald-400/10 blur-3xl" />
+
           <div className="absolute -right-24 top-1/3 h-80 w-80 rounded-full bg-green-400/10 blur-3xl" />
+
           <div className="absolute bottom-0 left-1/3 h-64 w-64 rounded-full bg-lime-300/10 blur-3xl" />
-
-          <motion.div
-            animate={{
-              y: [0, -18, 0],
-              opacity: [0.25, 0.5, 0.25],
-            }}
-            transition={{
-              duration: 5,
-              repeat: Infinity,
-              ease: "easeInOut",
-            }}
-            className="absolute left-[12%] top-[15%] h-2 w-2 rounded-full bg-emerald-400"
-          />
-
-          <motion.div
-            animate={{
-              y: [0, 16, 0],
-              opacity: [0.2, 0.45, 0.2],
-            }}
-            transition={{
-              duration: 6,
-              repeat: Infinity,
-              ease: "easeInOut",
-              delay: 1,
-            }}
-            className="absolute right-[18%] top-[25%] h-1.5 w-1.5 rounded-full bg-green-400"
-          />
-
-          <motion.div
-            animate={{
-              y: [0, -14, 0],
-              opacity: [0.2, 0.4, 0.2],
-            }}
-            transition={{
-              duration: 5.5,
-              repeat: Infinity,
-              ease: "easeInOut",
-              delay: 2,
-            }}
-            className="absolute bottom-[20%] right-[30%] h-2 w-2 rounded-full bg-lime-400"
-          />
         </div>
 
         <div className="relative space-y-6">
 
-          {/* =====================================
-              HEADER
-          ===================================== */}
+          {/* HEADER */}
 
           <motion.div
             initial={{
@@ -465,9 +469,6 @@ const MyAssignments = () => {
             animate={{
               opacity: 1,
               y: 0,
-            }}
-            transition={{
-              duration: 0.5,
             }}
             className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between"
           >
@@ -482,13 +483,9 @@ const MyAssignments = () => {
               </h1>
 
               <p className="mt-2 text-slate-500">
-                View and manage your submitted assignments.
+                View assignments, submit your work and track review status.
               </p>
             </div>
-
-            {/* =================================
-                NEW SUBMISSION BUTTON
-            ================================= */}
 
             <motion.button
               type="button"
@@ -500,49 +497,62 @@ const MyAssignments = () => {
               whileTap={{
                 scale: 0.98,
               }}
-              className="group relative inline-flex items-center justify-center gap-2 overflow-hidden rounded-xl bg-gradient-to-r from-emerald-600 via-green-600 to-lime-500 px-5 py-3 font-semibold text-white shadow-lg shadow-emerald-600/20 transition"
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-emerald-600 via-green-600 to-lime-500 px-5 py-3 font-semibold text-white shadow-lg shadow-emerald-600/20"
             >
-              <span className="absolute inset-0 -translate-x-full bg-white/20 transition-transform duration-700 group-hover:translate-x-full" />
+              <Plus className="h-5 w-5" />
 
-              <Plus className="relative h-5 w-5" />
-
-              <span className="relative">
-                Submit Assignment
-              </span>
+              Submit Assignment
             </motion.button>
           </motion.div>
 
-          {/* =====================================
-              SUMMARY
-          ===================================== */}
+          {/* SUMMARY */}
 
-          <div className="flex justify-end">
-            <motion.div
-              initial={{
-                opacity: 0,
-                scale: 0.95,
-              }}
-              animate={{
-                opacity: 1,
-                scale: 1,
-              }}
-              className="relative overflow-hidden rounded-2xl border border-emerald-100 bg-white/85 px-6 py-4 text-center shadow-lg shadow-emerald-900/5 backdrop-blur-xl"
-            >
-              <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-emerald-500 via-green-500 to-lime-400" />
+          <div className="grid gap-4 sm:grid-cols-3">
 
-              <p className="text-xs font-medium text-emerald-600">
-                Total Submissions
+            <div className="rounded-2xl border border-emerald-100 bg-white/90 p-5 shadow-lg">
+              <p className="text-xs font-bold uppercase tracking-wide text-slate-400">
+                Total
               </p>
 
-              <p className="mt-1 text-2xl font-black text-emerald-700">
+              <p className="mt-2 text-3xl font-black text-emerald-700">
                 {assignments.length}
               </p>
-            </motion.div>
+            </div>
+
+            <div className="rounded-2xl border border-amber-100 bg-white/90 p-5 shadow-lg">
+              <p className="text-xs font-bold uppercase tracking-wide text-slate-400">
+                Pending
+              </p>
+
+              <p className="mt-2 text-3xl font-black text-amber-600">
+                {
+                  assignments.filter(
+                    (item) =>
+                      item.submission?.status ===
+                      "pending"
+                  ).length
+                }
+              </p>
+            </div>
+
+            <div className="rounded-2xl border border-red-100 bg-white/90 p-5 shadow-lg">
+              <p className="text-xs font-bold uppercase tracking-wide text-slate-400">
+                Rejected
+              </p>
+
+              <p className="mt-2 text-3xl font-black text-red-600">
+                {
+                  assignments.filter(
+                    (item) =>
+                      item.submission?.status ===
+                      "rejected"
+                  ).length
+                }
+              </p>
+            </div>
           </div>
 
-          {/* =====================================
-              EMPTY STATE
-          ===================================== */}
+          {/* EMPTY */}
 
           {assignments.length === 0 ? (
             <motion.div
@@ -554,346 +564,369 @@ const MyAssignments = () => {
                 opacity: 1,
                 y: 0,
               }}
-              className="relative overflow-hidden rounded-3xl border border-dashed border-emerald-200 bg-white/85 px-6 py-16 text-center shadow-xl shadow-emerald-900/5 backdrop-blur-xl"
+              className="rounded-3xl border border-dashed border-emerald-200 bg-white/90 px-6 py-16 text-center shadow-xl"
             >
-              <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-emerald-500 via-green-500 to-lime-400" />
-
-              <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl border border-emerald-100 bg-emerald-50">
-                <FileText className="h-8 w-8 text-emerald-600" />
+              <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-emerald-50">
+                <ClipboardCheck className="h-8 w-8 text-emerald-600" />
               </div>
 
-              <h2 className="mt-5 text-lg font-bold text-slate-900">
-                No assignments submitted yet
+              <h2 className="mt-5 text-xl font-bold text-slate-900">
+                No assignments available
               </h2>
 
               <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-slate-500">
-                You haven't submitted any assignments yet.
-                Click the button below to submit your first
-                assignment.
+                Your enrolled courses don't have any assignments right now.
               </p>
-
-              <motion.button
-                type="button"
-                onClick={handleSubmitAssignment}
-                whileHover={{
-                  y: -2,
-                }}
-                whileTap={{
-                  scale: 0.98,
-                }}
-                className="mt-6 inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-emerald-600 to-green-600 px-5 py-3 text-sm font-bold text-white shadow-lg shadow-emerald-600/20 transition hover:from-emerald-700 hover:to-green-700"
-              >
-                <Upload className="h-4 w-4" />
-
-                Submit Assignment
-              </motion.button>
             </motion.div>
           ) : (
-
-            /* =====================================
-               ASSIGNMENTS LIST
-            ===================================== */
-
             <div className="grid gap-5">
 
-              {assignments.map((assignment, index) => {
-                const status = getStatus(
-                  assignment.status
-                );
+              {assignments.map(
+                (assignment, index) => {
+                  const submission =
+                    assignment.submission;
 
-                const StatusIcon = status.icon;
-
-                const isDeleting =
-                  deletingId === assignment._id;
-
-                const canModify =
-                  canModifyAssignment(
-                    assignment
+                  const status = getStatus(
+                    submission?.status
                   );
 
-                return (
-                  <motion.div
-                    key={assignment._id}
-                    initial={{
-                      opacity: 0,
-                      y: 25,
-                    }}
-                    animate={{
-                      opacity: 1,
-                      y: 0,
-                    }}
-                    transition={{
-                      duration: 0.45,
-                      delay: index * 0.06,
-                    }}
-                    whileHover={{
-                      y: -3,
-                    }}
-                    className="group relative overflow-hidden rounded-3xl border border-emerald-100 bg-white/90 shadow-lg shadow-emerald-900/5 backdrop-blur-xl transition-shadow duration-300 hover:shadow-2xl hover:shadow-emerald-900/10"
-                  >
-                    {/* TOP ACCENT */}
+                  const StatusIcon =
+                    status.icon;
 
-                    <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-emerald-500 via-green-500 to-lime-400 opacity-80 transition-opacity group-hover:opacity-100" />
+                  const canModify =
+                    canModifySubmission(
+                      assignment
+                    );
 
-                    {/* =================================
-                        ASSIGNMENT INFORMATION
-                    ================================= */}
+                  const isDeleting =
+                    deletingId ===
+                    submission?._id;
 
-                    <div className="p-5 sm:p-6">
+                  return (
+                    <motion.div
+                      key={assignment._id}
+                      initial={{
+                        opacity: 0,
+                        y: 25,
+                      }}
+                      animate={{
+                        opacity: 1,
+                        y: 0,
+                      }}
+                      transition={{
+                        delay:
+                          index * 0.05,
+                      }}
+                      whileHover={{
+                        y: -3,
+                      }}
+                      className="group relative overflow-hidden rounded-3xl border border-emerald-100 bg-white/90 shadow-lg backdrop-blur-xl"
+                    >
 
-                      <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+                      <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-emerald-500 via-green-500 to-lime-400" />
 
-                        {/* FILE INFO */}
+                      <div className="p-5 sm:p-6">
 
-                        <div className="flex min-w-0 gap-4">
+                        {/* ASSIGNMENT HEADER */}
 
-                          <motion.div
-                            whileHover={{
-                              rotate: 3,
-                              scale: 1.05,
-                            }}
-                            className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border border-emerald-100 bg-gradient-to-br from-emerald-50 to-green-50 shadow-sm"
-                          >
-                            <FileText className="h-7 w-7 text-emerald-600" />
-                          </motion.div>
+                        <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
 
-                          <div className="min-w-0">
+                          <div className="flex min-w-0 gap-4">
 
-                            <h2 className="truncate text-base font-bold text-slate-900 sm:text-lg">
-                              {assignment.originalName ||
-                                "Assignment File"}
-                            </h2>
+                            <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-emerald-50">
+                              <BookOpen className="h-7 w-7 text-emerald-600" />
+                            </div>
 
-                            <p className="mt-1 text-sm text-slate-500">
-                              Submitted on{" "}
-                              {formatDate(
-                                assignment.createdAt
+                            <div className="min-w-0">
+
+                              <h2 className="text-xl font-black text-slate-900">
+                                {assignment.title ||
+                                  "Untitled Assignment"}
+                              </h2>
+
+                              <p className="mt-1 text-sm font-medium text-emerald-700">
+                                {assignment.course?.title ||
+                                  "Course"}
+                              </p>
+
+                              <p className="mt-3 text-sm leading-6 text-slate-500">
+                                {assignment.description ||
+                                  "No instructions provided."}
+                              </p>
+
+                            </div>
+                          </div>
+
+                          {submission ? (
+                            <div
+                              className={`inline-flex w-fit items-center gap-2 rounded-full px-3 py-1.5 text-xs font-bold ${status.className}`}
+                            >
+                              <StatusIcon className="h-4 w-4" />
+
+                              {status.label}
+                            </div>
+                          ) : (
+                            <div className="inline-flex w-fit items-center gap-2 rounded-full bg-blue-50 px-3 py-1.5 text-xs font-bold text-blue-700 ring-1 ring-blue-200">
+                              <AlertCircle className="h-4 w-4" />
+
+                              Not Submitted
+                            </div>
+                          )}
+                        </div>
+
+                        {/* META */}
+
+                        <div className="mt-5 flex flex-wrap gap-3">
+
+                          <div className="inline-flex items-center gap-2 rounded-xl bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-600">
+                            <CalendarDays className="h-4 w-4" />
+
+                            Due:{" "}
+                            {formatDate(
+                              assignment.dueDate
+                            )}
+                          </div>
+
+                          {assignment.dueDate &&
+                            isOverdue(
+                              assignment.dueDate
+                            ) &&
+                            !submission && (
+                              <div className="inline-flex items-center gap-2 rounded-xl bg-red-50 px-3 py-2 text-xs font-bold text-red-600">
+                                <AlertCircle className="h-4 w-4" />
+
+                                Deadline Passed
+                              </div>
+                            )}
+                        </div>
+
+                        {/* SUBMISSION */}
+
+                        {submission && (
+                          <div className="mt-5 rounded-2xl border border-emerald-100 bg-emerald-50/50 p-4">
+
+                            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+
+                              <div className="flex min-w-0 items-center gap-3">
+
+                                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white">
+                                  <FileText className="h-5 w-5 text-emerald-600" />
+                                </div>
+
+                                <div className="min-w-0">
+
+                                  <p className="truncate text-sm font-bold text-slate-800">
+                                    {submission.originalName}
+                                  </p>
+
+                                  <p className="mt-1 text-xs text-slate-500">
+                                    Submitted{" "}
+                                    {formatDate(
+                                      submission.submittedAt ||
+                                        submission.createdAt
+                                    )}
+                                  </p>
+
+                                </div>
+                              </div>
+
+                              {submission.fileUrl && (
+                                <a
+                                  href={
+                                    submission.fileUrl
+                                  }
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-slate-800 px-4 py-2.5 text-xs font-bold text-white hover:bg-slate-900"
+                                >
+                                  <ExternalLink className="h-4 w-4" />
+
+                                  View File
+                                </a>
                               )}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* FEEDBACK */}
+
+                        {submission?.feedback && (
+                          <div
+                            className={`mt-5 rounded-2xl border p-4 ${
+                              submission.status ===
+                              "rejected"
+                                ? "border-red-200 bg-red-50"
+                                : "border-emerald-200 bg-emerald-50"
+                            }`}
+                          >
+                            <p
+                              className={`text-xs font-bold uppercase tracking-wide ${
+                                submission.status ===
+                                "rejected"
+                                  ? "text-red-500"
+                                  : "text-emerald-600"
+                              }`}
+                            >
+                              Admin Feedback
                             </p>
 
-                            {assignment.course?.title && (
-                              <p className="mt-1 text-sm font-medium text-slate-700">
-                                Course:{" "}
-                                {assignment.course.title}
+                            <p
+                              className={`mt-1 text-sm leading-6 ${
+                                submission.status ===
+                                "rejected"
+                                  ? "text-red-700"
+                                  : "text-slate-700"
+                              }`}
+                            >
+                              {submission.feedback}
+                            </p>
+
+                            {submission.reviewedAt && (
+                              <p className="mt-2 text-xs text-slate-400">
+                                Reviewed on{" "}
+                                {formatDate(
+                                  submission.reviewedAt
+                                )}
                               </p>
                             )}
                           </div>
+                        )}
+                      </div>
+
+                      {/* ACTIONS */}
+
+                      <div className="border-t border-emerald-100 bg-gradient-to-r from-emerald-50/70 via-white to-green-50/70 px-5 py-4 sm:px-6">
+
+                        <div className="flex flex-wrap gap-2">
+
+                          {!submission && (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                navigate(
+                                  `/student/assignments/submit?assignmentId=${assignment._id}`
+                                )
+                              }
+                              className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-emerald-600 to-green-600 px-4 py-2.5 text-sm font-bold text-white shadow-lg shadow-emerald-600/20"
+                            >
+                              <Upload className="h-4 w-4" />
+
+                              Submit Now
+                            </button>
+                          )}
+
+                          {submission &&
+                            submission.fileUrl && (
+                              <a
+                                href={
+                                  submission.fileUrl
+                                }
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-2 rounded-xl bg-slate-800 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-900"
+                              >
+                                <ExternalLink className="h-4 w-4" />
+
+                                View Submission
+                              </a>
+                            )}
+
+                          {canModify && (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                handleEditClick(
+                                  assignment
+                                )
+                              }
+                              disabled={
+                                updating ||
+                                isDeleting
+                              }
+                              className="inline-flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm font-semibold text-amber-700 hover:bg-amber-100 disabled:opacity-50"
+                            >
+                              <Pencil className="h-4 w-4" />
+
+                              {submission?.status ===
+                              "rejected"
+                                ? "Resubmit"
+                                : "Edit"}
+                            </button>
+                          )}
+
+                          {canModify && (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                handleDeleteSubmission(
+                                  assignment
+                                )
+                              }
+                              disabled={
+                                isDeleting ||
+                                updating
+                              }
+                              className="inline-flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-2.5 text-sm font-semibold text-red-600 hover:bg-red-100 disabled:opacity-50"
+                            >
+                              {isDeleting ? (
+                                <>
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                  Removing...
+                                </>
+                              ) : (
+                                <>
+                                  <Trash2 className="h-4 w-4" />
+                                  Remove
+                                </>
+                              )}
+                            </button>
+                          )}
                         </div>
 
-                        {/* STATUS */}
+                        {/* STATUS HELP */}
 
-                        <motion.div
-                          initial={{
-                            opacity: 0,
-                            scale: 0.9,
-                          }}
-                          animate={{
-                            opacity: 1,
-                            scale: 1,
-                          }}
-                          className={`inline-flex w-fit items-center gap-2 rounded-full px-3 py-1.5 text-xs font-bold ${status.className}`}
-                        >
-                          <StatusIcon className="h-4 w-4" />
-
-                          {status.label}
-                        </motion.div>
-                      </div>
-
-                      {/* =================================
-                          ADMIN FEEDBACK
-                      ================================= */}
-
-                      {assignment.feedback && (
-                        <motion.div
-                          initial={{
-                            opacity: 0,
-                            height: 0,
-                          }}
-                          animate={{
-                            opacity: 1,
-                            height: "auto",
-                          }}
-                          className={`mt-5 rounded-2xl border p-4 ${
-                            assignment.status ===
-                            "rejected"
-                              ? "border-red-100 bg-red-50"
-                              : "border-slate-100 bg-slate-50"
-                          }`}
-                        >
-                          <p
-                            className={`text-xs font-bold uppercase tracking-wide ${
-                              assignment.status ===
-                              "rejected"
-                                ? "text-red-500"
-                                : "text-slate-500"
-                            }`}
-                          >
-                            Admin Feedback
+                        {!submission && (
+                          <p className="mt-3 text-xs text-blue-600">
+                            This assignment has not been submitted yet.
                           </p>
-
-                          <p
-                            className={`mt-1 text-sm leading-6 ${
-                              assignment.status ===
-                              "rejected"
-                                ? "text-red-700"
-                                : "text-slate-700"
-                            }`}
-                          >
-                            {assignment.feedback}
-                          </p>
-
-                          {assignment.reviewedAt && (
-                            <p className="mt-2 text-xs text-slate-400">
-                              Reviewed on{" "}
-                              {formatDate(
-                                assignment.reviewedAt
-                              )}
-                            </p>
-                          )}
-                        </motion.div>
-                      )}
-                    </div>
-
-                    {/* =================================
-                        ACTION BUTTONS
-                    ================================= */}
-
-                    <div className="border-t border-emerald-100 bg-gradient-to-r from-emerald-50/70 via-white to-green-50/70 px-5 py-4 sm:px-6">
-
-                      <div className="flex flex-wrap gap-2">
-
-                        {/* VIEW FILE */}
-
-                        {assignment.fileUrl && (
-                          <motion.a
-                            whileHover={{
-                              y: -1,
-                            }}
-                            whileTap={{
-                              scale: 0.98,
-                            }}
-                            href={assignment.fileUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center justify-center gap-2 rounded-xl bg-slate-800 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-900"
-                          >
-                            <ExternalLink className="h-4 w-4" />
-
-                            View File
-                          </motion.a>
                         )}
 
-                        {/* EDIT */}
-
-                        {canModify && (
-                          <motion.button
-                            type="button"
-                            onClick={() =>
-                              handleEditClick(
-                                assignment
-                              )
-                            }
-                            disabled={
-                              updating ||
-                              isDeleting
-                            }
-                            whileHover={{
-                              y: -1,
-                            }}
-                            whileTap={{
-                              scale: 0.98,
-                            }}
-                            className="inline-flex items-center justify-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm font-semibold text-amber-700 transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-50"
-                          >
-                            <Pencil className="h-4 w-4" />
-
-                            Edit
-                          </motion.button>
+                        {submission?.status ===
+                          "pending" && (
+                          <p className="mt-3 text-xs text-amber-600">
+                            Your submission is waiting for admin review.
+                          </p>
                         )}
 
-                        {/* REMOVE */}
+                        {submission?.status ===
+                          "rejected" && (
+                          <p className="mt-3 text-xs text-red-500">
+                            Your submission was rejected. Update your file and resubmit it.
+                          </p>
+                        )}
 
-                        {canModify && (
-                          <motion.button
-                            type="button"
-                            onClick={() =>
-                              handleDeleteAssignment(
-                                assignment
-                              )
-                            }
-                            disabled={
-                              isDeleting ||
-                              updating
-                            }
-                            whileHover={{
-                              y: -1,
-                            }}
-                            whileTap={{
-                              scale: 0.98,
-                            }}
-                            className="inline-flex items-center justify-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-2.5 text-sm font-semibold text-red-600 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50"
-                          >
-                            {isDeleting ? (
-                              <>
-                                <Loader2 className="h-4 w-4 animate-spin" />
-
-                                Removing...
-                              </>
-                            ) : (
-                              <>
-                                <Trash2 className="h-4 w-4" />
-
-                                Remove
-                              </>
-                            )}
-                          </motion.button>
+                        {submission?.status ===
+                          "approved" && (
+                          <p className="mt-3 text-xs text-emerald-600">
+                            Your assignment has been approved. This submission is locked.
+                          </p>
                         )}
                       </div>
-
-                      {/* =================================
-                          STATUS MESSAGE
-                      ================================= */}
-
-                      {assignment.status ===
-                        "pending" && (
-                        <p className="mt-3 text-xs text-slate-400">
-                          Your assignment is waiting for
-                          admin review. You can edit or
-                          remove it while it is pending.
-                        </p>
-                      )}
-
-                      {assignment.status ===
-                        "rejected" && (
-                        <p className="mt-3 text-xs text-red-500">
-                          Your assignment was rejected.
-                          You can edit it and submit a new
-                          version, or remove it.
-                        </p>
-                      )}
-
-                      {assignment.status ===
-                        "approved" && (
-                        <p className="mt-3 text-xs text-emerald-600">
-                          This assignment has been approved.
-                          Editing and removal are disabled.
-                        </p>
-                      )}
-                    </div>
-                  </motion.div>
-                );
-              })}
+                    </motion.div>
+                  );
+                }
+              )}
             </div>
           )}
         </div>
       </div>
 
       {/* ==========================================
-          EDIT ASSIGNMENT MODAL
+          EDIT MODAL
       ========================================== */}
 
       <AnimatePresence>
-        {editingAssignment && (
+        {editingSubmission && (
           <motion.div
             initial={{
               opacity: 0,
@@ -922,33 +955,27 @@ const MyAssignments = () => {
                 scale: 0.95,
                 y: 20,
               }}
-              transition={{
-                duration: 0.25,
-              }}
-              className="relative max-h-[90vh] w-full max-w-lg overflow-y-auto overflow-hidden rounded-3xl border border-emerald-100 bg-white shadow-2xl shadow-emerald-950/20"
+              className="relative max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-3xl border border-emerald-100 bg-white shadow-2xl"
             >
 
-              {/* MODAL TOP ACCENT */}
-
               <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-emerald-500 via-green-500 to-lime-400" />
-
-              {/* MODAL HEADER */}
 
               <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4 sm:px-6">
 
                 <div>
-                  <div className="mb-1 flex items-center gap-2">
-                    <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-50">
-                      <Pencil className="h-4 w-4 text-emerald-600" />
-                    </div>
+                  <div className="flex items-center gap-2">
+                    <Pencil className="h-5 w-5 text-emerald-600" />
 
                     <h2 className="text-lg font-bold text-slate-900">
-                      Edit Assignment
+                      {editingSubmission.submission?.status ===
+                      "rejected"
+                        ? "Resubmit Assignment"
+                        : "Edit Submission"}
                     </h2>
                   </div>
 
                   <p className="mt-1 text-xs text-slate-500">
-                    Replace your existing assignment file.
+                    Upload a new version of your assignment.
                   </p>
                 </div>
 
@@ -956,76 +983,53 @@ const MyAssignments = () => {
                   type="button"
                   onClick={closeEditModal}
                   disabled={updating}
-                  className="flex h-9 w-9 items-center justify-center rounded-xl text-slate-500 transition hover:bg-emerald-50 hover:text-emerald-700 disabled:opacity-50"
+                  className="flex h-9 w-9 items-center justify-center rounded-xl text-slate-500 hover:bg-emerald-50 hover:text-emerald-700"
                 >
                   <X className="h-5 w-5" />
                 </button>
               </div>
 
-              {/* MODAL BODY */}
-
               <div className="space-y-5 px-5 py-6 sm:px-6">
 
-                {/* CURRENT FILE */}
-
-                <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
-
+                <div>
                   <p className="text-xs font-bold uppercase tracking-wide text-slate-400">
-                    Current File
+                    Assignment
                   </p>
 
-                  <div className="mt-2 flex items-center gap-3">
-
-                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-emerald-50">
-                      <FileText className="h-5 w-5 text-emerald-600" />
-                    </div>
-
-                    <p className="truncate text-sm font-semibold text-slate-700">
-                      {editingAssignment.originalName ||
-                        "Assignment File"}
-                    </p>
-                  </div>
+                  <p className="mt-1 font-bold text-slate-800">
+                    {editingSubmission.title}
+                  </p>
                 </div>
 
-                {/* REJECTED FEEDBACK */}
-
-                {editingAssignment.status ===
+                {editingSubmission.submission?.status ===
                   "rejected" &&
-                  editingAssignment.feedback && (
+                  editingSubmission.submission
+                    ?.feedback && (
                     <div className="rounded-2xl border border-red-200 bg-red-50 p-4">
-
                       <p className="text-xs font-bold uppercase tracking-wide text-red-500">
                         Rejection Feedback
                       </p>
 
                       <p className="mt-1 text-sm leading-6 text-red-700">
-                        {editingAssignment.feedback}
+                        {
+                          editingSubmission
+                            .submission
+                            .feedback
+                        }
                       </p>
                     </div>
                   )}
 
-                {/* NEW FILE */}
-
                 <div>
-
-                  <label className="mb-2 block text-sm font-semibold text-slate-700">
+                  <label className="mb-2 block text-sm font-bold text-slate-700">
                     Select New File
                   </label>
 
                   <label
                     htmlFor="assignment-edit-file"
-                    className="group flex cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed border-emerald-200 bg-emerald-50/30 px-5 py-8 text-center transition hover:border-emerald-400 hover:bg-emerald-50"
+                    className="flex cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed border-emerald-200 bg-emerald-50/40 px-5 py-8 text-center hover:border-emerald-400 hover:bg-emerald-50"
                   >
-
-                    <motion.div
-                      whileHover={{
-                        scale: 1.08,
-                        rotate: 3,
-                      }}
-                      className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white shadow-md shadow-emerald-900/5"
-                    >
-                      <Upload className="h-6 w-6 text-emerald-600" />
-                    </motion.div>
+                    <Upload className="h-8 w-8 text-emerald-600" />
 
                     {selectedFile ? (
                       <>
@@ -1040,12 +1044,11 @@ const MyAssignments = () => {
                     ) : (
                       <>
                         <p className="mt-3 text-sm font-bold text-slate-800">
-                          Choose a new assignment file
+                          Choose new file
                         </p>
 
                         <p className="mt-1 text-xs text-slate-500">
-                          PDF, JPG, JPEG, PNG, DOC or DOCX
-                          · Max 10MB
+                          PDF, JPG, JPEG, PNG, DOC or DOCX · Max 10MB
                         </p>
                       </>
                     )}
@@ -1061,59 +1064,31 @@ const MyAssignments = () => {
                   </label>
                 </div>
 
-                {/* INFO */}
-
-                <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
-
-                  <p className="text-sm leading-6 text-amber-800">
-                    <strong>Important:</strong>{" "}
-                    Replacing this file will send the
-                    assignment back to{" "}
-                    <strong>Pending</strong> status for
-                    admin review.
-                  </p>
+                <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-800">
+                  Your updated submission will return to{" "}
+                  <strong>Pending</strong> status and will need to be reviewed again.
                 </div>
               </div>
 
-              {/* MODAL FOOTER */}
-
               <div className="flex flex-col-reverse gap-2 border-t border-slate-100 bg-slate-50 px-5 py-4 sm:flex-row sm:justify-end sm:px-6">
-
-                {/* CANCEL */}
 
                 <button
                   type="button"
                   onClick={closeEditModal}
                   disabled={updating}
-                  className="rounded-xl border border-slate-200 bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 transition hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="rounded-xl border border-slate-200 bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 hover:bg-emerald-50"
                 >
                   Cancel
                 </button>
 
-                {/* REPLACE */}
-
-                <motion.button
+                <button
                   type="button"
-                  onClick={handleUpdateAssignment}
+                  onClick={handleUpdateSubmission}
                   disabled={
                     updating ||
                     !selectedFile
                   }
-                  whileHover={
-                    !updating && selectedFile
-                      ? {
-                          y: -1,
-                        }
-                      : {}
-                  }
-                  whileTap={
-                    !updating && selectedFile
-                      ? {
-                          scale: 0.98,
-                        }
-                      : {}
-                  }
-                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-emerald-600 to-green-600 px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-emerald-600/20 transition hover:from-emerald-700 hover:to-green-700 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-emerald-600 to-green-600 px-5 py-2.5 text-sm font-bold text-white disabled:opacity-50"
                 >
                   {updating ? (
                     <>
@@ -1123,10 +1098,10 @@ const MyAssignments = () => {
                   ) : (
                     <>
                       <Upload className="h-4 w-4" />
-                      Replace File
+                      Resubmit
                     </>
                   )}
-                </motion.button>
+                </button>
               </div>
             </motion.div>
           </motion.div>

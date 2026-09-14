@@ -1,72 +1,67 @@
-
-import { useEffect, useState } from "react";
-import { motion } from "framer-motion";
+import React, { useEffect, useState } from "react";
 import {
+  Plus,
+  Trash2,
+  CheckCircle2,
+  XCircle,
+  Clock3,
   FileText,
   ExternalLink,
   Loader2,
-  User,
+  ChevronDown,
+  ChevronUp,
+  Users,
+  CalendarDays,
   BookOpen,
-  CheckCircle,
-  XCircle,
-  Clock,
-  X,
-  MessageSquare,
-  Sparkles,
-  ShieldCheck,
+  AlertCircle,
 } from "lucide-react";
+import { Link } from "react-router-dom";
+import { motion, AnimatePresence } from "framer-motion";
 
 import api from "../../services/api";
 
 const ManageAssignments = () => {
   const [assignments, setAssignments] = useState([]);
-
   const [loading, setLoading] = useState(true);
 
-  const [error, setError] = useState("");
+  const [processing, setProcessing] = useState(null);
 
-  // Modal state
-  const [showModal, setShowModal] = useState(false);
-
-  const [selectedAssignment, setSelectedAssignment] =
+  const [expandedAssignment, setExpandedAssignment] =
     useState(null);
-
-  const [action, setAction] = useState(null);
 
   const [feedback, setFeedback] = useState("");
 
-  const [processing, setProcessing] = useState(false);
+  const [reviewingSubmission, setReviewingSubmission] =
+    useState(null);
 
-  // ==========================================
+  // =====================================================
   // FETCH ASSIGNMENTS
-  // ==========================================
+  // =====================================================
 
   const fetchAssignments = async () => {
     try {
       setLoading(true);
-      setError("");
 
       const response = await api.get("/assignments");
 
-      console.log(
-        "ADMIN ASSIGNMENTS:",
-        response.data
-      );
+      const data =
+        response.data?.assignments ||
+        response.data?.data ||
+        response.data ||
+        [];
 
       setAssignments(
-        Array.isArray(response.data?.assignments)
-          ? response.data.assignments
-          : []
+        Array.isArray(data) ? data : []
       );
     } catch (error) {
       console.error(
-        "FETCH ADMIN ASSIGNMENTS ERROR:",
+        "Failed to fetch assignments:",
         error
       );
 
-      setError(
+      alert(
         error.response?.data?.message ||
-          "Failed to load submitted assignments."
+          "Failed to load assignments"
       );
     } finally {
       setLoading(false);
@@ -77,833 +72,964 @@ const ManageAssignments = () => {
     fetchAssignments();
   }, []);
 
-  // ==========================================
-  // OPEN APPROVE / REJECT MODAL
-  // ==========================================
+  // =====================================================
+  // FORMAT DATE
+  // =====================================================
 
-  const openActionModal = (
-    assignment,
-    selectedAction
+  const formatDate = (date) => {
+    if (!date) return "No due date";
+
+    return new Date(date).toLocaleDateString(
+      "en-IN",
+      {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+      }
+    );
+  };
+
+  const formatDateTime = (date) => {
+    if (!date) return "N/A";
+
+    return new Date(date).toLocaleString(
+      "en-IN",
+      {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      }
+    );
+  };
+
+  // =====================================================
+  // TOGGLE ASSIGNMENT
+  // =====================================================
+
+  const toggleAssignment = (assignmentId) => {
+    setExpandedAssignment((prev) =>
+      prev === assignmentId
+        ? null
+        : assignmentId
+    );
+  };
+
+  // =====================================================
+  // DELETE ASSIGNMENT
+  // =====================================================
+
+  const handleDeleteAssignment = async (
+    assignmentId
   ) => {
-    setSelectedAssignment(assignment);
-    setAction(selectedAction);
+    const confirmed = window.confirm(
+      "Are you sure you want to delete this assignment? All student submissions will also be deleted."
+    );
 
-    // Existing feedback clear kar do
-    setFeedback("");
-
-    setShowModal(true);
-  };
-
-  // ==========================================
-  // CLOSE MODAL
-  // ==========================================
-
-  const closeModal = () => {
-    if (processing) return;
-
-    setShowModal(false);
-    setSelectedAssignment(null);
-    setAction(null);
-    setFeedback("");
-  };
-
-  // ==========================================
-  // APPROVE / REJECT
-  // ==========================================
-
-  const handleSubmitAction = async () => {
-    if (!selectedAssignment) return;
-
-    // Reject ke liye feedback mandatory
-    if (
-      action === "reject" &&
-      !feedback.trim()
-    ) {
-      alert(
-        "Please enter a reason for rejecting this assignment."
-      );
-
-      return;
-    }
+    if (!confirmed) return;
 
     try {
-      setProcessing(true);
+      setProcessing(assignmentId);
 
-      const assignmentId =
-        selectedAssignment._id ||
-        selectedAssignment.id;
-
-      const endpoint =
-        action === "approve"
-          ? `/assignments/${assignmentId}/approve`
-          : `/assignments/${assignmentId}/reject`;
-
-      const defaultFeedback =
-        action === "approve"
-          ? "Assignment approved successfully."
-          : "";
-
-      const response = await api.patch(endpoint, {
-        feedback:
-          feedback.trim() || defaultFeedback,
-      });
-
-      console.log(
-        "ASSIGNMENT ACTION RESPONSE:",
-        response.data
+      const response = await api.delete(
+        `/assignments/${assignmentId}`
       );
 
-      const updatedAssignment =
-        response.data?.assignment;
-
-      // ==========================================
-      // UPDATE UI IMMEDIATELY
-      // ==========================================
-
-      setAssignments((prevAssignments) =>
-        prevAssignments.map((assignment) => {
-          const currentId =
-            assignment._id ||
-            assignment.id;
-
-          if (currentId !== assignmentId) {
-            return assignment;
-          }
-
-          return {
-            ...assignment,
-
-            ...(updatedAssignment || {}),
-
-            status:
-              updatedAssignment?.status ||
-              (action === "approve"
-                ? "approved"
-                : "rejected"),
-
-            feedback:
-              updatedAssignment?.feedback ??
-              feedback.trim() ??
-              "",
-
-            reviewedAt:
-              updatedAssignment?.reviewedAt ||
-              new Date().toISOString(),
-          };
-        })
+      setAssignments((prev) =>
+        prev.filter(
+          (assignment) =>
+            assignment._id !== assignmentId
+        )
       );
 
-      // Modal close
-      setShowModal(false);
-      setSelectedAssignment(null);
-      setAction(null);
-      setFeedback("");
+      if (
+        expandedAssignment ===
+        assignmentId
+      ) {
+        setExpandedAssignment(null);
+      }
 
       alert(
-        action === "approve"
-          ? "Assignment approved successfully."
-          : "Assignment rejected successfully."
+        response.data?.message ||
+          "Assignment deleted successfully"
       );
     } catch (error) {
       console.error(
-        "ASSIGNMENT ACTION ERROR:",
-        error
+        "DELETE ASSIGNMENT ERROR"
+      );
+
+      console.error(
+        "STATUS:",
+        error.response?.status
+      );
+
+      console.error(
+        "DATA:",
+        error.response?.data
+      );
+
+      console.error(
+        "URL:",
+        error.config?.url
+      );
+
+      console.error(
+        "METHOD:",
+        error.config?.method
       );
 
       alert(
         error.response?.data?.message ||
-          `Failed to ${
-            action === "approve"
-              ? "approve"
-              : "reject"
-          } assignment.`
+          "Failed to delete assignment"
       );
     } finally {
-      setProcessing(false);
+      setProcessing(null);
     }
   };
 
-  // ==========================================
-  // STATUS
-  // ==========================================
+  // =====================================================
+  // START REVIEW
+  // =====================================================
 
-  const getStatus = (status) => {
-    switch (status) {
-      case "approved":
-        return {
-          label: "Approved",
-          icon: CheckCircle,
-          className:
-            "border-emerald-200 bg-emerald-50 text-emerald-700",
-        };
+  const startReview = (
+    submission,
+    type
+  ) => {
+    setReviewingSubmission({
+      id: submission._id,
+      type,
+    });
 
-      case "rejected":
-        return {
-          label: "Rejected",
-          icon: XCircle,
-          className:
-            "border-red-200 bg-red-50 text-red-600",
-        };
+    setFeedback(
+      submission.feedback || ""
+    );
+  };
 
-      default:
-        return {
-          label: "Pending",
-          icon: Clock,
-          className:
-            "border-amber-200 bg-amber-50 text-amber-700",
-        };
+  // =====================================================
+  // CANCEL REVIEW
+  // =====================================================
+
+  const cancelReview = () => {
+    setReviewingSubmission(null);
+    setFeedback("");
+  };
+
+  // =====================================================
+  // APPROVE / REJECT
+  // =====================================================
+
+  const handleReview = async (
+    submissionId,
+    type
+  ) => {
+    try {
+      setProcessing(submissionId);
+
+      const finalFeedback =
+        feedback.trim() ||
+        (type === "approve"
+          ? "Assignment approved"
+          : "Assignment rejected");
+
+      await api.patch(
+        `/assignments/submissions/${submissionId}/${type}`,
+        {
+          feedback: finalFeedback,
+        }
+      );
+
+      setReviewingSubmission(null);
+      setFeedback("");
+
+      await fetchAssignments();
+
+      alert(
+        type === "approve"
+          ? "Assignment approved successfully"
+          : "Assignment rejected successfully"
+      );
+    } catch (error) {
+      console.error(
+        "REVIEW ERROR:",
+        error.response?.data ||
+          error
+      );
+
+      alert(
+        error.response?.data?.message ||
+          `Failed to ${type} assignment`
+      );
+    } finally {
+      setProcessing(null);
     }
   };
 
-  // ==========================================
+  // =====================================================
+  // GET SUBMISSIONS
+  // =====================================================
+
+  const getSubmissions = (
+    assignment
+  ) => {
+    return Array.isArray(
+      assignment.submissions
+    )
+      ? assignment.submissions
+      : [];
+  };
+
+  // =====================================================
+  // STATUS BADGE
+  // =====================================================
+
+  const getStatusBadge = (
+    status
+  ) => {
+    if (status === "approved") {
+      return (
+        <span className="inline-flex items-center gap-1.5 rounded-full bg-green-100 px-3 py-1 text-xs font-semibold text-green-700">
+          <CheckCircle2 size={14} />
+          Approved
+        </span>
+      );
+    }
+
+    if (status === "rejected") {
+      return (
+        <span className="inline-flex items-center gap-1.5 rounded-full bg-red-100 px-3 py-1 text-xs font-semibold text-red-700">
+          <XCircle size={14} />
+          Rejected
+        </span>
+      );
+    }
+
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-700">
+        <Clock3 size={14} />
+        Pending
+      </span>
+    );
+  };
+
+  // =====================================================
   // LOADING
-  // ==========================================
+  // =====================================================
 
   if (loading) {
     return (
-      <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-gradient-to-br from-emerald-50 via-white to-green-50">
-        {/* Ambient Glows */}
-        <div className="pointer-events-none absolute -left-24 top-20 h-80 w-80 rounded-full bg-emerald-400/20 blur-3xl" />
+      <div className="flex min-h-[500px] items-center justify-center">
+        <div className="flex flex-col items-center gap-3">
+          <Loader2
+            className="animate-spin text-green-600"
+            size={40}
+          />
 
-        <div className="pointer-events-none absolute -right-24 bottom-10 h-96 w-96 rounded-full bg-lime-400/20 blur-3xl" />
-
-        <motion.div
-          initial={{ opacity: 0, scale: 0.85 }}
-          animate={{ opacity: 1, scale: 1 }}
-          className="relative flex flex-col items-center gap-4"
-        >
-          <div className="relative flex h-16 w-16 items-center justify-center rounded-2xl border border-emerald-200 bg-white shadow-xl shadow-emerald-900/10">
-            <Loader2 className="h-9 w-9 animate-spin text-emerald-600" />
-
-            <span className="absolute inset-0 rounded-2xl border border-emerald-400/30 animate-ping" />
-          </div>
-
-          <p className="text-sm font-semibold text-slate-600">
+          <p className="text-sm font-medium text-gray-500">
             Loading assignments...
           </p>
-        </motion.div>
+        </div>
       </div>
     );
   }
 
-  // ==========================================
+  // =====================================================
   // UI
-  // ==========================================
+  // =====================================================
 
   return (
-    <div className="relative min-h-screen overflow-hidden bg-gradient-to-br from-emerald-50 via-white to-green-50 px-5 py-10 text-slate-900">
+    <div className="min-h-screen bg-gray-50 px-4 py-6 sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-7xl">
 
-      {/* ======================================
-          AMBIENT BACKGROUND
-      ====================================== */}
-
-      <div className="pointer-events-none absolute -left-32 top-20 h-96 w-96 rounded-full bg-emerald-400/15 blur-3xl" />
-
-      <div className="pointer-events-none absolute -right-32 top-1/3 h-96 w-96 rounded-full bg-green-400/15 blur-3xl" />
-
-      <div className="pointer-events-none absolute bottom-0 left-1/3 h-80 w-80 rounded-full bg-lime-400/10 blur-3xl" />
-
-      {/* Floating particles */}
-
-      <motion.div
-        animate={{
-          y: [0, -18, 0],
-          opacity: [0.25, 0.7, 0.25],
-        }}
-        transition={{
-          duration: 4,
-          repeat: Infinity,
-          ease: "easeInOut",
-        }}
-        className="pointer-events-none absolute left-[7%] top-[18%] h-2 w-2 rounded-full bg-emerald-500"
-      />
-
-      <motion.div
-        animate={{
-          y: [0, 15, 0],
-          opacity: [0.2, 0.6, 0.2],
-        }}
-        transition={{
-          duration: 5,
-          repeat: Infinity,
-          ease: "easeInOut",
-        }}
-        className="pointer-events-none absolute right-[10%] top-[25%] h-3 w-3 rounded-full bg-green-400"
-      />
-
-      <motion.div
-        animate={{
-          x: [0, 10, 0],
-          y: [0, -10, 0],
-          opacity: [0.2, 0.55, 0.2],
-        }}
-        transition={{
-          duration: 6,
-          repeat: Infinity,
-          ease: "easeInOut",
-        }}
-        className="pointer-events-none absolute bottom-[15%] right-[25%] h-2 w-2 rounded-full bg-lime-500"
-      />
-
-      {/* Decorative lines */}
-
-      <div className="pointer-events-none absolute left-0 top-36 h-px w-full bg-gradient-to-r from-transparent via-emerald-200/60 to-transparent" />
-
-      <div className="pointer-events-none absolute bottom-28 left-0 h-px w-full bg-gradient-to-r from-transparent via-green-200/50 to-transparent" />
-
-      <div className="relative mx-auto max-w-7xl">
-
-        {/* ======================================
+        {/* =================================================
             HEADER
-        ====================================== */}
+        ================================================= */}
 
         <motion.div
-          initial={{ opacity: 0, y: -15 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4 }}
+          initial={{
+            opacity: 0,
+            y: -20,
+          }}
+          animate={{
+            opacity: 1,
+            y: 0,
+          }}
+          className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"
         >
-          <div className="inline-flex items-center gap-2 rounded-full border border-emerald-100 bg-white/80 px-4 py-2 text-xs font-bold uppercase tracking-wider text-emerald-700 shadow-sm backdrop-blur-md">
-            <Sparkles className="h-3.5 w-3.5" />
-            Administration
+          <div>
+            <div className="mb-2 flex items-center gap-3">
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-green-100">
+                <FileText
+                  size={25}
+                  className="text-green-600"
+                />
+              </div>
+
+              <div>
+                <h1 className="text-2xl font-bold text-gray-900 sm:text-3xl">
+                  Manage Assignments
+                </h1>
+
+                <p className="mt-1 text-sm text-gray-500">
+                  Create, review and manage
+                  student assignments
+                </p>
+              </div>
+            </div>
           </div>
 
-          <div className="mt-4 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-
-            <div>
-              <h1 className="text-4xl font-black tracking-tight text-slate-900 sm:text-5xl">
-                Submitted{" "}
-                <span className="bg-gradient-to-r from-emerald-600 via-green-500 to-lime-500 bg-clip-text text-transparent">
-                  Assignments
-                </span>
-              </h1>
-
-              <p className="mt-3 text-slate-500">
-                Review assignments submitted by students.
-              </p>
-            </div>
-
-            <div className="inline-flex w-fit items-center gap-2 rounded-xl border border-emerald-100 bg-white/80 px-4 py-2.5 text-sm font-semibold text-emerald-700 shadow-sm backdrop-blur-md">
-              <ShieldCheck className="h-4 w-4" />
-              Assignment Review
-            </div>
-
-          </div>
+          <Link
+            to="/admin/assignments/add"
+            className="inline-flex items-center justify-center gap-2 rounded-xl bg-green-600 px-5 py-3 text-sm font-semibold text-white shadow-lg shadow-green-200 transition hover:bg-green-700"
+          >
+            <Plus size={19} />
+            Add Assignment
+          </Link>
         </motion.div>
 
-        {/* ======================================
-            ERROR
-        ====================================== */}
-
-        {error && (
-          <motion.div
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="mt-8 rounded-2xl border border-red-200 bg-red-50 p-5 text-red-600 shadow-sm"
-          >
-            <div className="flex flex-wrap items-center justify-between gap-4">
-              <span className="text-sm font-medium">
-                {error}
-              </span>
-
-              <button
-                onClick={fetchAssignments}
-                className="rounded-xl bg-red-100 px-4 py-2 text-sm font-semibold transition hover:bg-red-200"
-              >
-                Retry
-              </button>
-            </div>
-          </motion.div>
-        )}
-
-        {/* ======================================
+        {/* =================================================
             EMPTY STATE
-        ====================================== */}
+        ================================================= */}
 
-        {!error &&
-          assignments.length === 0 && (
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="relative mt-10 overflow-hidden rounded-[2rem] border border-emerald-100 bg-white/90 py-20 text-center shadow-xl shadow-emerald-900/5 backdrop-blur-xl"
+        {assignments.length === 0 ? (
+          <motion.div
+            initial={{
+              opacity: 0,
+              scale: 0.98,
+            }}
+            animate={{
+              opacity: 1,
+              scale: 1,
+            }}
+            className="rounded-2xl border border-dashed border-gray-300 bg-white p-12 text-center shadow-sm"
+          >
+            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-green-50">
+              <FileText
+                size={30}
+                className="text-green-600"
+              />
+            </div>
+
+            <h2 className="text-xl font-bold text-gray-900">
+              No assignments found
+            </h2>
+
+            <p className="mx-auto mt-2 max-w-md text-sm text-gray-500">
+              You haven't created any
+              assignments yet. Create your
+              first assignment for students.
+            </p>
+
+            <Link
+              to="/admin/assignments/add"
+              className="mt-6 inline-flex items-center gap-2 rounded-xl bg-green-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-green-700"
             >
-              <div className="absolute left-0 right-0 top-0 h-1 bg-gradient-to-r from-emerald-600 via-green-500 to-lime-400" />
+              <Plus size={18} />
+              Create Assignment
+            </Link>
+          </motion.div>
+        ) : (
+          /* =================================================
+             ASSIGNMENT LIST
+          ================================================= */
 
-              <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-3xl bg-emerald-50">
-                <FileText className="h-10 w-10 text-emerald-400" />
-              </div>
+          <div className="space-y-5">
+            {assignments.map(
+              (
+                assignment,
+                index
+              ) => {
+                const submissions =
+                  getSubmissions(
+                    assignment
+                  );
 
-              <h2 className="mt-5 text-xl font-bold text-slate-900">
-                No assignments submitted yet
-              </h2>
+                const isExpanded =
+                  expandedAssignment ===
+                  assignment._id;
 
-              <p className="mt-2 text-slate-500">
-                Student submissions will appear here.
-              </p>
-            </motion.div>
-          )}
+                const pendingCount =
+                  submissions.filter(
+                    (submission) =>
+                      submission.status ===
+                      "pending"
+                  ).length;
 
-        {/* ======================================
-            ASSIGNMENTS
-        ====================================== */}
+                const approvedCount =
+                  submissions.filter(
+                    (submission) =>
+                      submission.status ===
+                      "approved"
+                  ).length;
 
-        <div className="mt-10 grid gap-5">
-          {assignments.map(
-            (assignment, index) => {
-              const status = getStatus(
-                assignment.status
-              );
+                const rejectedCount =
+                  submissions.filter(
+                    (submission) =>
+                      submission.status ===
+                      "rejected"
+                  ).length;
 
-              const StatusIcon = status.icon;
+                return (
+                  <motion.div
+                    key={
+                      assignment._id
+                    }
+                    initial={{
+                      opacity: 0,
+                      y: 20,
+                    }}
+                    animate={{
+                      opacity: 1,
+                      y: 0,
+                    }}
+                    transition={{
+                      delay:
+                        index * 0.05,
+                    }}
+                    className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm"
+                  >
+                    {/* =================================================
+                        ASSIGNMENT HEADER
+                    ================================================= */}
 
-              return (
-                <motion.div
-                  key={
-                    assignment._id ||
-                    assignment.id ||
-                    index
-                  }
-                  initial={{
-                    opacity: 0,
-                    y: 20,
-                  }}
-                  animate={{
-                    opacity: 1,
-                    y: 0,
-                  }}
-                  transition={{
-                    delay: index * 0.05,
-                    duration: 0.4,
-                  }}
-                  whileHover={{
-                    y: -3,
-                  }}
-                  className="group relative overflow-hidden rounded-[1.75rem] border border-emerald-100 bg-white/90 p-6 shadow-lg shadow-emerald-900/5 backdrop-blur-xl transition-all duration-300 hover:border-emerald-200 hover:shadow-xl hover:shadow-emerald-900/10"
-                >
+                    <div className="p-5 sm:p-6">
+                      <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
 
-                  {/* Top accent */}
+                        {/* LEFT */}
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-start gap-4">
+                            <div className="hidden h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-green-100 sm:flex">
+                              <BookOpen
+                                size={21}
+                                className="text-green-600"
+                              />
+                            </div>
 
-                  <div className="absolute left-0 right-0 top-0 h-1 origin-left scale-x-0 bg-gradient-to-r from-emerald-600 via-green-500 to-lime-400 transition-transform duration-500 group-hover:scale-x-100" />
+                            <div className="min-w-0 flex-1">
+                              <h2 className="break-words text-lg font-bold text-gray-900 sm:text-xl">
+                                {
+                                  assignment.title
+                                }
+                              </h2>
 
-                  {/* ==================================
-                      TOP SECTION
-                  ================================== */}
+                              <div className="mt-2 flex flex-wrap gap-2">
+                                <span className="inline-flex items-center gap-1.5 rounded-lg bg-gray-100 px-2.5 py-1 text-xs font-medium text-gray-600">
+                                  <BookOpen
+                                    size={13}
+                                  />
 
-                  <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
+                                  {assignment
+                                    .course
+                                    ?.title ||
+                                    "Unknown Course"}
+                                </span>
 
-                    {/* FILE + STUDENT INFO */}
+                                <span className="inline-flex items-center gap-1.5 rounded-lg bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700">
+                                  <CalendarDays
+                                    size={13}
+                                  />
 
-                    <div className="flex min-w-0 gap-4">
+                                  Due:{" "}
+                                  {formatDate(
+                                    assignment.dueDate
+                                  )}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
 
-                      <motion.div
-                        whileHover={{
-                          scale: 1.05,
-                          rotate: 2,
-                        }}
-                        className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-50 to-green-100 shadow-sm"
-                      >
-                        <FileText className="h-6 w-6 text-emerald-600" />
-                      </motion.div>
+                          {/* DESCRIPTION */}
 
-                      <div className="min-w-0">
-                        <h2 className="break-all text-lg font-bold text-slate-900">
-                          {assignment.originalName ||
-                            "Assignment"}
-                        </h2>
-
-                        {/* STUDENT + COURSE */}
-
-                        <div className="mt-3 flex flex-wrap gap-4 text-sm text-slate-500">
-
-                          <span className="flex items-center gap-2">
-                            <User className="h-4 w-4 text-emerald-600" />
-
-                            {assignment.student?.name ||
-                              "Student"}
-                          </span>
-
-                          <span className="flex items-center gap-2">
-                            <BookOpen className="h-4 w-4 text-emerald-600" />
-
-                            {assignment.course?.title ||
-                              "Course"}
-                          </span>
-
-                        </div>
-
-                        {/* EMAIL */}
-
-                        {assignment.student
-                          ?.email && (
-                          <p className="mt-2 break-all text-xs text-slate-400">
+                          <p className="mt-4 max-w-4xl whitespace-pre-wrap text-sm leading-6 text-gray-600">
                             {
-                              assignment
-                                .student.email
+                              assignment.description
                             }
                           </p>
-                        )}
 
-                        {/* SUBMITTED DATE */}
+                          {/* ADMIN ATTACHMENT */}
 
-                        {assignment.createdAt && (
-                          <p className="mt-2 text-xs text-slate-400">
-                            Submitted{" "}
-                            {new Date(
-                              assignment.createdAt
-                            ).toLocaleString()}
-                          </p>
-                        )}
-                      </div>
-                    </div>
+                          {assignment.attachmentUrl && (
+                            <a
+                              href={
+                                assignment.attachmentUrl
+                              }
+                              target="_blank"
+                              rel="noreferrer"
+                              className="mt-4 inline-flex items-center gap-2 rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-xs font-semibold text-green-700 transition hover:bg-green-100"
+                            >
+                              <FileText
+                                size={15}
+                              />
 
-                    {/* ==================================
-                        STATUS + OPEN FILE
-                    ================================== */}
+                              View Assignment
+                              File
 
-                    <div className="flex flex-wrap items-center gap-3">
-
-                      {/* STATUS */}
-
-                      <div
-                        className={`inline-flex items-center gap-2 rounded-xl border px-4 py-2 text-sm font-semibold ${status.className}`}
-                      >
-                        <StatusIcon className="h-4 w-4" />
-
-                        {status.label}
-                      </div>
-
-                      {/* OPEN FILE */}
-
-                      {assignment.fileUrl && (
-                        <motion.a
-                          href={
-                            assignment.fileUrl
-                          }
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          whileHover={{ scale: 1.03 }}
-                          whileTap={{ scale: 0.97 }}
-                          className="group/file inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-emerald-600 to-green-500 px-5 py-3 text-sm font-semibold text-white shadow-md shadow-emerald-600/20 transition-all hover:shadow-lg hover:shadow-emerald-600/30"
-                        >
-                          Open File
-
-                          <ExternalLink className="h-4 w-4 transition-transform duration-300 group-hover/file:-translate-y-0.5 group-hover/file:translate-x-0.5" />
-                        </motion.a>
-                      )}
-
-                    </div>
-                  </div>
-
-                  {/* ==================================
-                      ADMIN FEEDBACK
-                  ================================== */}
-
-                  {assignment.feedback && (
-                    <motion.div
-                      initial={{
-                        opacity: 0,
-                        y: 5,
-                      }}
-                      animate={{
-                        opacity: 1,
-                        y: 0,
-                      }}
-                      className="mt-6 rounded-2xl border border-emerald-100 bg-emerald-50/70 p-5"
-                    >
-
-                      <div className="flex items-center gap-2">
-                        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-white shadow-sm">
-                          <MessageSquare className="h-4 w-4 text-emerald-600" />
+                              <ExternalLink
+                                size={13}
+                              />
+                            </a>
+                          )}
                         </div>
 
-                        <p className="text-xs font-bold uppercase tracking-wider text-emerald-700">
-                          Admin Feedback
-                        </p>
+                        {/* RIGHT ACTIONS */}
+
+                        <div className="flex flex-wrap items-center gap-2 lg:max-w-xs lg:justify-end">
+                          <div className="flex items-center gap-2 rounded-xl bg-gray-50 px-3 py-2">
+                            <Users
+                              size={17}
+                              className="text-gray-500"
+                            />
+
+                            <span className="text-sm font-semibold text-gray-700">
+                              {
+                                submissions.length
+                              }
+                            </span>
+
+                            <span className="text-xs text-gray-500">
+                              submission
+                              {submissions.length !==
+                              1
+                                ? "s"
+                                : ""}
+                            </span>
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={() =>
+                              toggleAssignment(
+                                assignment._id
+                              )
+                            }
+                            className="inline-flex items-center gap-2 rounded-xl border border-gray-200 px-3 py-2 text-sm font-semibold text-gray-700 transition hover:bg-gray-50"
+                          >
+                            {isExpanded ? (
+                              <>
+                                Hide
+                                <ChevronUp
+                                  size={17}
+                                />
+                              </>
+                            ) : (
+                              <>
+                                View
+                                <ChevronDown
+                                  size={17}
+                                />
+                              </>
+                            )}
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() =>
+                              handleDeleteAssignment(
+                                assignment._id
+                              )
+                            }
+                            disabled={
+                              processing ===
+                              assignment._id
+                            }
+                            className="inline-flex items-center gap-2 rounded-xl border border-red-200 px-3 py-2 text-sm font-semibold text-red-600 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            {processing ===
+                            assignment._id ? (
+                              <Loader2
+                                size={17}
+                                className="animate-spin"
+                              />
+                            ) : (
+                              <Trash2
+                                size={17}
+                              />
+                            )}
+
+                            Delete
+                          </button>
+                        </div>
                       </div>
 
-                      <p className="mt-3 text-sm leading-6 text-slate-600">
-                        {assignment.feedback}
-                      </p>
+                      {/* =================================================
+                          STATISTICS
+                      ================================================= */}
 
-                    </motion.div>
-                  )}
+                      <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
+                        <div className="rounded-xl bg-gray-50 p-3">
+                          <p className="text-xs text-gray-500">
+                            Total
+                          </p>
 
-                  {/* ==================================
-                      ADMIN ACTIONS
-                  ================================== */}
+                          <p className="mt-1 text-lg font-bold text-gray-900">
+                            {
+                              submissions.length
+                            }
+                          </p>
+                        </div>
 
-                  {assignment.status !==
-                    "approved" &&
-                    assignment.status !==
-                      "rejected" && (
-                      <div className="mt-6 flex flex-wrap gap-3 border-t border-slate-100 pt-5">
+                        <div className="rounded-xl bg-amber-50 p-3">
+                          <p className="text-xs text-amber-700">
+                            Pending
+                          </p>
 
-                        {/* APPROVE */}
+                          <p className="mt-1 text-lg font-bold text-amber-800">
+                            {pendingCount}
+                          </p>
+                        </div>
 
-                        <motion.button
-                          onClick={() =>
-                            openActionModal(
-                              assignment,
-                              "approve"
-                            )
-                          }
-                          disabled={processing}
-                          whileHover={!processing ? { scale: 1.02 } : {}}
-                          whileTap={!processing ? { scale: 0.97 } : {}}
-                          className="inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-emerald-600 to-green-500 px-5 py-3 text-sm font-semibold text-white shadow-md shadow-emerald-600/20 transition-all hover:shadow-lg hover:shadow-emerald-600/30 disabled:cursor-not-allowed disabled:opacity-50"
-                        >
-                          <CheckCircle className="h-4 w-4" />
+                        <div className="rounded-xl bg-green-50 p-3">
+                          <p className="text-xs text-green-700">
+                            Approved
+                          </p>
 
-                          Approve
-                        </motion.button>
+                          <p className="mt-1 text-lg font-bold text-green-800">
+                            {approvedCount}
+                          </p>
+                        </div>
 
-                        {/* REJECT */}
+                        <div className="rounded-xl bg-red-50 p-3">
+                          <p className="text-xs text-red-700">
+                            Rejected
+                          </p>
 
-                        <motion.button
-                          onClick={() =>
-                            openActionModal(
-                              assignment,
-                              "reject"
-                            )
-                          }
-                          disabled={processing}
-                          whileHover={!processing ? { scale: 1.02 } : {}}
-                          whileTap={!processing ? { scale: 0.97 } : {}}
-                          className="inline-flex items-center justify-center gap-2 rounded-xl border border-red-200 bg-red-50 px-5 py-3 text-sm font-semibold text-red-600 transition-all hover:border-red-300 hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50"
-                        >
-                          <XCircle className="h-4 w-4" />
-
-                          Reject
-                        </motion.button>
-
+                          <p className="mt-1 text-lg font-bold text-red-800">
+                            {rejectedCount}
+                          </p>
+                        </div>
                       </div>
-                    )}
-
-                  {/* ==================================
-                      REVIEWED INFO
-                  ================================== */}
-
-                  {assignment.reviewedAt && (
-                    <p className="mt-4 text-xs text-slate-400">
-                      Reviewed on{" "}
-                      {new Date(
-                        assignment.reviewedAt
-                      ).toLocaleString()}
-                    </p>
-                  )}
-                </motion.div>
-              );
-            }
-          )}
-        </div>
-      </div>
-
-      {/* ==========================================
-          APPROVE / REJECT MODAL
-      ========================================== */}
-
-      {showModal &&
-        selectedAssignment && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 px-4 py-6 backdrop-blur-md">
-
-            <motion.div
-              initial={{
-                opacity: 0,
-                scale: 0.94,
-                y: 20,
-              }}
-              animate={{
-                opacity: 1,
-                scale: 1,
-                y: 0,
-              }}
-              transition={{
-                duration: 0.25,
-              }}
-              className="relative max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-[2rem] border border-emerald-100 bg-white p-6 shadow-2xl shadow-slate-900/20 sm:p-7"
-            >
-
-              {/* Top accent */}
-
-              <div
-                className={`absolute left-0 right-0 top-0 h-1.5 ${
-                  action === "approve"
-                    ? "bg-gradient-to-r from-emerald-600 via-green-500 to-lime-400"
-                    : "bg-gradient-to-r from-red-500 via-rose-500 to-orange-400"
-                }`}
-              />
-
-              {/* MODAL HEADER */}
-
-              <div className="flex items-start justify-between gap-4">
-
-                <div>
-                  <div className="flex items-center gap-3">
-
-                    {action === "approve" ? (
-                      <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-emerald-50">
-                        <CheckCircle className="h-5 w-5 text-emerald-600" />
-                      </div>
-                    ) : (
-                      <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-red-50">
-                        <XCircle className="h-5 w-5 text-red-500" />
-                      </div>
-                    )}
-
-                    <div>
-                      <h2 className="text-xl font-bold text-slate-900">
-                        {action === "approve"
-                          ? "Approve Assignment"
-                          : "Reject Assignment"}
-                      </h2>
-
-                      <p className="mt-1 max-w-xs break-all text-sm text-slate-400">
-                        {selectedAssignment.originalName ||
-                          "Assignment"}
-                      </p>
                     </div>
 
-                  </div>
-                </div>
+                    {/* =================================================
+                        SUBMISSIONS
+                    ================================================= */}
 
-                {/* CLOSE */}
+                    <AnimatePresence>
+                      {isExpanded && (
+                        <motion.div
+                          initial={{
+                            height: 0,
+                            opacity: 0,
+                          }}
+                          animate={{
+                            height: "auto",
+                            opacity: 1,
+                          }}
+                          exit={{
+                            height: 0,
+                            opacity: 0,
+                          }}
+                          className="border-t border-gray-200 bg-gray-50"
+                        >
+                          <div className="p-5 sm:p-6">
+                            <div className="mb-5 flex items-center justify-between">
+                              <div>
+                                <h3 className="text-lg font-bold text-gray-900">
+                                  Student
+                                  Submissions
+                                </h3>
 
-                <button
-                  onClick={closeModal}
-                  disabled={processing}
-                  className="rounded-xl p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 disabled:opacity-50"
-                >
-                  <X className="h-5 w-5" />
-                </button>
+                                <p className="mt-1 text-xs text-gray-500">
+                                  Review submitted
+                                  work and provide
+                                  feedback.
+                                </p>
+                              </div>
+                            </div>
 
-              </div>
+                            {submissions.length ===
+                            0 ? (
+                              <div className="rounded-xl border border-dashed border-gray-300 bg-white p-8 text-center">
+                                <AlertCircle
+                                  size={28}
+                                  className="mx-auto text-gray-400"
+                                />
 
-              {/* ==================================
-                  CONFIRMATION TEXT
-              ================================== */}
+                                <p className="mt-3 text-sm font-medium text-gray-600">
+                                  No students have
+                                  submitted this
+                                  assignment yet.
+                                </p>
+                              </div>
+                            ) : (
+                              <div className="space-y-4">
+                                {submissions.map(
+                                  (
+                                    submission
+                                  ) => (
+                                    <div
+                                      key={
+                                        submission._id
+                                      }
+                                      className="rounded-xl border border-gray-200 bg-white p-4 sm:p-5"
+                                    >
+                                      {/* STUDENT INFO */}
 
-              <div
-                className={`mt-6 rounded-2xl border p-4 ${
-                  action === "approve"
-                    ? "border-emerald-100 bg-emerald-50/70"
-                    : "border-red-100 bg-red-50/70"
-                }`}
-              >
-                <p className="text-sm font-medium text-slate-700">
-                  {action === "approve"
-                    ? "Are you sure you want to approve this assignment?"
-                    : "Are you sure you want to reject this assignment?"}
-                </p>
+                                      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                                        <div className="flex items-start gap-3">
+                                          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-green-100 font-bold text-green-700">
+                                            {(
+                                              submission
+                                                .student
+                                                ?.name ||
+                                              "S"
+                                            )
+                                              .charAt(
+                                                0
+                                              )
+                                              .toUpperCase()}
+                                          </div>
 
-                <p className="mt-1 text-xs text-slate-500">
-                  Student:{" "}
-                  {selectedAssignment.student
-                    ?.name || "Student"}
-                </p>
-              </div>
+                                          <div>
+                                            <h4 className="font-semibold text-gray-900">
+                                              {submission
+                                                .student
+                                                ?.name ||
+                                                "Unknown Student"}
+                                            </h4>
 
-              {/* ==================================
-                  FEEDBACK TEXTAREA
-              ================================== */}
+                                            <p className="text-xs text-gray-500">
+                                              {submission
+                                                .student
+                                                ?.email ||
+                                                "No email"}
+                                            </p>
 
-              <div className="mt-6">
+                                            <p className="mt-1 text-xs text-gray-400">
+                                              Submitted:{" "}
+                                              {formatDateTime(
+                                                submission.submittedAt
+                                              )}
+                                            </p>
+                                          </div>
+                                        </div>
 
-                <label className="mb-2 block text-sm font-bold text-slate-700">
-                  {action === "reject"
-                    ? "Reason for rejection"
-                    : "Note / Feedback"}
+                                        <div>
+                                          {getStatusBadge(
+                                            submission.status
+                                          )}
+                                        </div>
+                                      </div>
 
-                  {action === "reject" && (
-                    <span className="ml-1 text-red-500">
-                      *
-                    </span>
-                  )}
-                </label>
+                                      {/* FILE */}
 
-                <textarea
-                  value={feedback}
-                  onChange={(e) =>
-                    setFeedback(e.target.value)
-                  }
-                  rows={5}
-                  disabled={processing}
-                  placeholder={
-                    action === "reject"
-                      ? "Explain why this assignment is being rejected..."
-                      : "Write an optional note for the student..."
-                  }
-                  className="w-full resize-none rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none transition-all duration-300 placeholder:text-slate-400 hover:border-emerald-200 hover:bg-white focus:border-emerald-500 focus:bg-white focus:ring-4 focus:ring-emerald-500/10 disabled:cursor-not-allowed disabled:opacity-50"
-                />
+                                      <div className="mt-4 flex flex-col gap-3 rounded-xl bg-gray-50 p-3 sm:flex-row sm:items-center sm:justify-between">
+                                        <div className="flex min-w-0 items-center gap-3">
+                                          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white">
+                                            <FileText
+                                              size={18}
+                                              className="text-green-600"
+                                            />
+                                          </div>
 
-                {action === "reject" && (
-                  <p className="mt-2 text-xs leading-5 text-slate-400">
-                    Please provide a clear reason so the
-                    student knows what needs to be improved.
-                  </p>
-                )}
+                                          <div className="min-w-0">
+                                            <p className="truncate text-sm font-medium text-gray-800">
+                                              {submission.originalName ||
+                                                "Submitted file"}
+                                            </p>
 
-              </div>
+                                            <p className="text-xs text-gray-500">
+                                              {submission.fileType ||
+                                                "File"}
+                                            </p>
+                                          </div>
+                                        </div>
 
-              {/* ==================================
-                  MODAL BUTTONS
-              ================================== */}
+                                        {submission.fileUrl && (
+                                          <a
+                                            href={
+                                              submission.fileUrl
+                                            }
+                                            target="_blank"
+                                            rel="noreferrer"
+                                            className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg bg-green-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-green-700"
+                                          >
+                                            Open File
+                                            <ExternalLink
+                                              size={14}
+                                            />
+                                          </a>
+                                        )}
+                                      </div>
 
-              <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+                                      {/* FEEDBACK */}
 
-                {/* CANCEL */}
+                                      {submission.feedback && (
+                                        <div className="mt-4 rounded-xl border border-blue-100 bg-blue-50 p-3">
+                                          <p className="text-xs font-semibold text-blue-700">
+                                            Admin Feedback
+                                          </p>
 
-                <button
-                  onClick={closeModal}
-                  disabled={processing}
-                  className="rounded-xl border border-slate-200 px-5 py-3 text-sm font-semibold text-slate-500 transition hover:bg-slate-50 hover:text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  Cancel
-                </button>
+                                          <p className="mt-1 whitespace-pre-wrap text-sm text-blue-900">
+                                            {
+                                              submission.feedback
+                                            }
+                                          </p>
+                                        </div>
+                                      )}
 
-                {/* CONFIRM */}
+                                      {/* REVIEW ACTIONS */}
 
-                <button
-                  onClick={handleSubmitAction}
-                  disabled={
-                    processing ||
-                    (action === "reject" &&
-                      !feedback.trim())
-                  }
-                  className={`inline-flex items-center justify-center gap-2 rounded-xl px-5 py-3 text-sm font-semibold text-white shadow-md transition-all disabled:cursor-not-allowed disabled:opacity-50 ${
-                    action === "approve"
-                      ? "bg-gradient-to-r from-emerald-600 to-green-500 shadow-emerald-600/20 hover:shadow-lg"
-                      : "bg-gradient-to-r from-red-600 to-rose-500 shadow-red-600/20 hover:shadow-lg"
-                  }`}
-                >
+                                      {submission.status ===
+                                        "pending" && (
+                                        <div className="mt-4">
+                                          {reviewingSubmission?.id ===
+                                            submission._id ? (
+                                            <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
+                                              <label className="mb-2 block text-sm font-semibold text-gray-700">
+                                                Feedback
+                                              </label>
 
-                  {processing ? (
-                    <>
-                      <Loader2 className="h-4 w-4 animate-spin" />
+                                              <textarea
+                                                value={
+                                                  feedback
+                                                }
+                                                onChange={(
+                                                  e
+                                                ) =>
+                                                  setFeedback(
+                                                    e
+                                                      .target
+                                                      .value
+                                                  )
+                                                }
+                                                rows={4}
+                                                placeholder="Write feedback for the student..."
+                                                className="w-full resize-none rounded-xl border border-gray-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-green-500 focus:ring-2 focus:ring-green-100"
+                                              />
 
-                      Processing...
-                    </>
-                  ) : (
-                    <>
-                      {action === "approve" ? (
-                        <>
-                          <CheckCircle className="h-4 w-4" />
-                          Confirm Approval
-                        </>
-                      ) : (
-                        <>
-                          <XCircle className="h-4 w-4" />
-                          Confirm Rejection
-                        </>
+                                              <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:justify-end">
+                                                <button
+                                                  type="button"
+                                                  onClick={
+                                                    cancelReview
+                                                  }
+                                                  disabled={
+                                                    processing ===
+                                                    submission._id
+                                                  }
+                                                  className="rounded-xl border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-white disabled:opacity-50"
+                                                >
+                                                  Cancel
+                                                </button>
+
+                                                <button
+                                                  type="button"
+                                                  onClick={() =>
+                                                    handleReview(
+                                                      submission._id,
+                                                      reviewingSubmission.type
+                                                    )
+                                                  }
+                                                  disabled={
+                                                    processing ===
+                                                    submission._id
+                                                  }
+                                                  className={`inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50 ${
+                                                    reviewingSubmission.type ===
+                                                    "approve"
+                                                      ? "bg-green-600 hover:bg-green-700"
+                                                      : "bg-red-600 hover:bg-red-700"
+                                                  }`}
+                                                >
+                                                  {processing ===
+                                                  submission._id ? (
+                                                    <Loader2
+                                                      size={
+                                                        16
+                                                      }
+                                                      className="animate-spin"
+                                                    />
+                                                  ) : reviewingSubmission.type ===
+                                                    "approve" ? (
+                                                    <CheckCircle2
+                                                      size={
+                                                        16
+                                                      }
+                                                    />
+                                                  ) : (
+                                                    <XCircle
+                                                      size={
+                                                        16
+                                                      }
+                                                    />
+                                                  )}
+
+                                                  {reviewingSubmission.type ===
+                                                  "approve"
+                                                    ? "Approve"
+                                                    : "Reject"}
+                                                </button>
+                                              </div>
+                                            </div>
+                                          ) : (
+                                            <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
+                                              <button
+                                                type="button"
+                                                onClick={() =>
+                                                  startReview(
+                                                    submission,
+                                                    "reject"
+                                                  )
+                                                }
+                                                className="inline-flex items-center justify-center gap-2 rounded-xl border border-red-200 px-4 py-2 text-sm font-semibold text-red-600 transition hover:bg-red-50"
+                                              >
+                                                <XCircle
+                                                  size={
+                                                    17
+                                                  }
+                                                />
+                                                Reject
+                                              </button>
+
+                                              <button
+                                                type="button"
+                                                onClick={() =>
+                                                  startReview(
+                                                    submission,
+                                                    "approve"
+                                                  )
+                                                }
+                                                className="inline-flex items-center justify-center gap-2 rounded-xl bg-green-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-green-700"
+                                              >
+                                                <CheckCircle2
+                                                  size={
+                                                    17
+                                                  }
+                                                />
+                                                Approve
+                                              </button>
+                                            </div>
+                                          )}
+                                        </div>
+                                      )}
+
+                                      {/* REVIEWED DATE */}
+
+                                      {submission.reviewedAt && (
+                                        <p className="mt-3 text-right text-xs text-gray-400">
+                                          Reviewed:{" "}
+                                          {formatDateTime(
+                                            submission.reviewedAt
+                                          )}
+                                        </p>
+                                      )}
+                                    </div>
+                                  )
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        </motion.div>
                       )}
-                    </>
-                  )}
-
-                </button>
-
-              </div>
-
-            </motion.div>
+                    </AnimatePresence>
+                  </motion.div>
+                );
+              }
+            )}
           </div>
         )}
+      </div>
     </div>
   );
 };

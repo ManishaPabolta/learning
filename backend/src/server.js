@@ -17,7 +17,6 @@ const assignmentRoutes = require("./routes/assignmentRoutes");
 const userRoutes = require("./routes/userRoutes");
 const notificationRoutes = require("./routes/notificationRoutes");
 
-
 // =====================================================
 // APP
 // =====================================================
@@ -25,38 +24,41 @@ const notificationRoutes = require("./routes/notificationRoutes");
 const app = express();
 
 // =====================================================
-// DATABASE CONNECTION
+// DATABASE
 // =====================================================
 
 connectDB();
 
 // =====================================================
-// MIDDLEWARES
+// MIDDLEWARE
 // =====================================================
 
-// CORS
-app.use(cors());
+app.use(
+  cors({
+    origin: "http://localhost:5173",
+    credentials: true,
+  })
+);
 
-// JSON data
 app.use(express.json());
 
-// Form data
-app.use(express.urlencoded({ extended: true }));
+app.use(
+  express.urlencoded({
+    extended: true,
+  })
+);
 
-// HTTP request logger
 app.use(morgan("dev"));
 
 // =====================================================
 // STATIC FILES
 // =====================================================
 
-// Upload folder access
-// Example:
-// http://localhost:5000/uploads/filename.pdf
-
 app.use(
   "/uploads",
-  express.static(path.join(__dirname, "uploads"))
+  express.static(
+    path.join(__dirname, "uploads")
+  )
 );
 
 // =====================================================
@@ -71,59 +73,74 @@ app.get("/", (req, res) => {
 });
 
 // =====================================================
-// API ROUTES
+// AUTH ROUTES
 // =====================================================
 
-// -----------------------------
-// AUTH ROUTES
-// -----------------------------
+app.use(
+  "/api/auth",
+  authRoutes
+);
 
-// POST /api/auth/send-otp
-// POST /api/auth/verify-otp
-// POST /api/auth/login
-// POST /api/auth/refresh-token
-// POST /api/auth/logout
-// GET  /api/auth/me
-
-app.use("/api/auth", authRoutes);
-
-// -----------------------------
+// =====================================================
 // COURSE ROUTES
-// -----------------------------
+// =====================================================
 
-// GET    /api/courses
-// GET    /api/courses/:id
-// POST   /api/courses
-// PATCH  /api/courses/:id
-// DELETE /api/courses/:id
-// POST   /api/courses/enroll/:id
+app.use(
+  "/api/courses",
+  courseRoutes
+);
 
-app.use("/api/courses", courseRoutes);
-
-// -----------------------------
+// =====================================================
 // ASSIGNMENT ROUTES
-// -----------------------------
+// =====================================================
 
-// POST  /api/assignments/upload
-// GET   /api/assignments/my
-// GET   /api/assignments
-// PATCH /api/assignments/:id/approve
-// PATCH /api/assignments/:id/reject
+// CREATE ASSIGNMENT
+// POST /api/assignments
 
-app.use("/api/assignments", assignmentRoutes);
+// GET ALL ASSIGNMENTS
+// GET /api/assignments
 
-// -----------------------------
-// USER MANAGEMENT ROUTES
-// -----------------------------
+// DELETE ASSIGNMENT
+// DELETE /api/assignments/:id
 
-// GET    /api/users
-// GET    /api/users/:id
-// PATCH  /api/users/:id/role
-// DELETE /api/users/:id
+// STUDENT AVAILABLE ASSIGNMENTS
+// GET /api/assignments/available
 
-app.use("/api/users", userRoutes);
+// STUDENT MY ASSIGNMENTS
+// GET /api/assignments/my
 
+// SUBMIT ASSIGNMENT
+// POST /api/assignments/:assignmentId/submit
 
+// UPDATE SUBMISSION
+// PUT /api/assignments/submissions/:id
+
+// DELETE SUBMISSION
+// DELETE /api/assignments/submissions/:id
+
+// APPROVE SUBMISSION
+// PATCH /api/assignments/submissions/:id/approve
+
+// REJECT SUBMISSION
+// PATCH /api/assignments/submissions/:id/reject
+
+app.use(
+  "/api/assignments",
+  assignmentRoutes
+);
+
+// =====================================================
+// USER ROUTES
+// =====================================================
+
+app.use(
+  "/api/users",
+  userRoutes
+);
+
+// =====================================================
+// NOTIFICATION ROUTES
+// =====================================================
 
 app.use(
   "/api/notifications",
@@ -135,10 +152,15 @@ app.use(
 // =====================================================
 
 app.use((req, res) => {
+  console.log(
+    `404 - ${req.method} ${req.originalUrl}`
+  );
+
   res.status(404).json({
     success: false,
     message: "Route Not Found",
     path: req.originalUrl,
+    method: req.method,
   });
 });
 
@@ -146,27 +168,57 @@ app.use((req, res) => {
 // GLOBAL ERROR HANDLER
 // =====================================================
 
-app.use((err, req, res, next) => {
-  console.error("GLOBAL ERROR:", err);
+app.use(
+  (err, req, res, next) => {
+    console.error(
+      "GLOBAL ERROR:",
+      err
+    );
 
-  res.status(err.status || 500).json({
-    success: false,
-    message: err.message || "Internal Server Error",
-  });
-});
+    res.status(
+      err.status || 500
+    ).json({
+      success: false,
+      message:
+        err.message ||
+        "Internal Server Error",
+    });
+  }
+);
 
 // =====================================================
 // SERVER START
 // =====================================================
 
-const PORT = process.env.PORT || 5000;
+const PORT =
+  process.env.PORT || 5000;
 
 app.listen(PORT, () => {
-  console.log("====================================");
-  console.log("LMS BACKEND SERVER");
-  console.log("====================================");
-  console.log(`Server Running Port : ${PORT}`);
-  console.log(`API URL : http://localhost:${PORT}`);
-  console.log(`Uploads : http://localhost:${PORT}/uploads`);
-  console.log("====================================");
+  console.log(
+    "===================================="
+  );
+
+  console.log(
+    "       LMS BACKEND SERVER"
+  );
+
+  console.log(
+    "===================================="
+  );
+
+  console.log(
+    `Server Running Port : ${PORT}`
+  );
+
+  console.log(
+    `API URL : http://localhost:${PORT}`
+  );
+
+  console.log(
+    `Uploads : http://localhost:${PORT}/uploads`
+  );
+
+  console.log(
+    "===================================="
+  );
 });

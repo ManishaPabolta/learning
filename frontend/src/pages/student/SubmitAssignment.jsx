@@ -1,5 +1,4 @@
-
-import { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import {
   Upload,
@@ -10,72 +9,112 @@ import {
   ArrowLeft,
   X,
   Sparkles,
+  CalendarDays,
+  BookOpen,
 } from "lucide-react";
-import { Link, useNavigate } from "react-router-dom";
+import {
+  Link,
+  useNavigate,
+  useSearchParams,
+} from "react-router-dom";
 
 import api from "../../services/api";
 
 const SubmitAssignment = () => {
   const navigate = useNavigate();
 
-  const [courses, setCourses] = useState([]);
-  const [courseId, setCourseId] = useState("");
-  const [file, setFile] = useState(null);
+  const [searchParams] = useSearchParams();
 
-  const [loadingCourses, setLoadingCourses] = useState(true);
-  const [submitting, setSubmitting] = useState(false);
+  const preselectedAssignmentId =
+    searchParams.get("assignmentId");
 
-  const [message, setMessage] = useState("");
-  const [error, setError] = useState("");
+  const [assignments, setAssignments] =
+    useState([]);
+
+  const [assignmentId, setAssignmentId] =
+    useState(
+      preselectedAssignmentId || ""
+    );
+
+  const [file, setFile] =
+    useState(null);
+
+  const [loadingAssignments, setLoadingAssignments] =
+    useState(true);
+
+  const [submitting, setSubmitting] =
+    useState(false);
+
+  const [message, setMessage] =
+    useState("");
+
+  const [error, setError] =
+    useState("");
 
   // ==========================================
-  // GET COURSES
+  // FETCH AVAILABLE ASSIGNMENTS
   // ==========================================
 
   useEffect(() => {
-    const fetchCourses = async () => {
+    const fetchAssignments = async () => {
       try {
-        setLoadingCourses(true);
+        setLoadingAssignments(true);
         setError("");
 
-        const response = await api.get("/courses");
+        const response = await api.get(
+          "/assignments/available"
+        );
 
-        console.log("COURSES RESPONSE:", response.data);
+        if (response.data?.success) {
+          const list =
+            Array.isArray(
+              response.data.assignments
+            )
+              ? response.data.assignments
+              : [];
 
-        const data = response.data;
+          setAssignments(list);
 
-        let courseList = [];
-
-        if (Array.isArray(data)) {
-          courseList = data;
-        } else if (Array.isArray(data?.courses)) {
-          courseList = data.courses;
-        } else if (Array.isArray(data?.data)) {
-          courseList = data.data;
+          if (
+            preselectedAssignmentId &&
+            list.some(
+              (item) =>
+                item._id ===
+                preselectedAssignmentId
+            )
+          ) {
+            setAssignmentId(
+              preselectedAssignmentId
+            );
+          }
+        } else {
+          setAssignments([]);
         }
-
-        setCourses(courseList);
       } catch (error) {
-        console.error("FETCH COURSES ERROR:", error);
+        console.error(
+          "FETCH AVAILABLE ASSIGNMENTS ERROR:",
+          error
+        );
 
         setError(
           error.response?.data?.message ||
-            "Unable to load courses."
+            "Unable to load assignments."
         );
       } finally {
-        setLoadingCourses(false);
+        setLoadingAssignments(false);
       }
     };
 
-    fetchCourses();
-  }, []);
+    fetchAssignments();
+  }, [preselectedAssignmentId]);
 
   // ==========================================
   // FILE VALIDATION
   // ==========================================
 
   const handleFileChange = (e) => {
-    const selectedFile = e.target.files?.[0];
+    const selectedFile =
+      e.target.files?.[0];
 
     setError("");
     setMessage("");
@@ -85,11 +124,8 @@ const SubmitAssignment = () => {
       return;
     }
 
-    // ------------------------------------------
-    // MAX FILE SIZE = 10 MB
-    // ------------------------------------------
-
-    const maxSize = 10 * 1024 * 1024;
+    const maxSize =
+      10 * 1024 * 1024;
 
     if (selectedFile.size > maxSize) {
       setError(
@@ -101,10 +137,6 @@ const SubmitAssignment = () => {
 
       return;
     }
-
-    // ------------------------------------------
-    // ALLOWED EXTENSIONS
-    // ------------------------------------------
 
     const allowedExtensions = [
       ".pdf",
@@ -118,12 +150,13 @@ const SubmitAssignment = () => {
     const fileName =
       selectedFile.name.toLowerCase();
 
-    const isValidExtension =
-      allowedExtensions.some((extension) =>
-        fileName.endsWith(extension)
+    const validExtension =
+      allowedExtensions.some(
+        (extension) =>
+          fileName.endsWith(extension)
       );
 
-    if (!isValidExtension) {
+    if (!validExtension) {
       setError(
         "Only PDF, JPG, JPEG, PNG, DOC and DOCX files are allowed."
       );
@@ -138,17 +171,19 @@ const SubmitAssignment = () => {
   };
 
   // ==========================================
-  // REMOVE SELECTED FILE
+  // REMOVE FILE
   // ==========================================
 
   const handleRemoveFile = () => {
     setFile(null);
 
-    const fileInput =
-      document.getElementById("assignment-file");
+    const input =
+      document.getElementById(
+        "assignment-file"
+      );
 
-    if (fileInput) {
-      fileInput.value = "";
+    if (input) {
+      input.value = "";
     }
 
     setError("");
@@ -156,7 +191,17 @@ const SubmitAssignment = () => {
   };
 
   // ==========================================
-  // SUBMIT ASSIGNMENT
+  // SELECTED ASSIGNMENT
+  // ==========================================
+
+  const selectedAssignment =
+    assignments.find(
+      (assignment) =>
+        assignment._id === assignmentId
+    );
+
+  // ==========================================
+  // SUBMIT
   // ==========================================
 
   const handleSubmit = async (e) => {
@@ -165,73 +210,64 @@ const SubmitAssignment = () => {
     setError("");
     setMessage("");
 
-    // ------------------------------------------
-    // COURSE VALIDATION
-    // ------------------------------------------
-
-    if (!courseId) {
-      setError("Please select a course.");
+    if (!assignmentId) {
+      setError(
+        "Please select an assignment."
+      );
       return;
     }
 
-    // ------------------------------------------
-    // FILE VALIDATION
-    // ------------------------------------------
-
     if (!file) {
-      setError("Please select your assignment file.");
+      setError(
+        "Please select your assignment file."
+      );
       return;
     }
 
     try {
       setSubmitting(true);
 
-      const formData = new FormData();
+      const formData =
+        new FormData();
 
-      formData.append("file", file);
-      formData.append("courseId", courseId);
-
-      console.log("SUBMITTING ASSIGNMENT...");
-      console.log("Course ID:", courseId);
-      console.log("File:", file.name);
-
-      const response = await api.post(
-        "/assignments/upload",
-        formData,
-        {
-          headers: {
-            "Content-Type": "multipart/form-data",
-          },
-        }
+      formData.append(
+        "file",
+        file
       );
 
-      console.log(
-        "SUBMISSION RESPONSE:",
-        response.data
-      );
+      const response =
+        await api.post(
+          `/assignments/${assignmentId}/submit`,
+          formData,
+          {
+            headers: {
+              "Content-Type":
+                "multipart/form-data",
+            },
+          }
+        );
 
       if (response.data?.success) {
         setMessage(
-          response.data?.message ||
+          response.data.message ||
             "Assignment submitted successfully."
         );
 
-        setCourseId("");
         setFile(null);
 
-        // Reset input
-        const fileInput =
+        const input =
           document.getElementById(
             "assignment-file"
           );
 
-        if (fileInput) {
-          fileInput.value = "";
+        if (input) {
+          input.value = "";
         }
 
-        // Redirect after success
         setTimeout(() => {
-          navigate("/student/assignments");
+          navigate(
+            "/student/assignments"
+          );
         }, 1200);
       } else {
         setError(
@@ -255,19 +291,22 @@ const SubmitAssignment = () => {
   };
 
   // ==========================================
-  // FORMAT FILE SIZE
+  // FILE SIZE
   // ==========================================
 
   const formatFileSize = (bytes) => {
     if (!bytes) return "0 KB";
 
-    const mb = bytes / 1024 / 1024;
+    const mb =
+      bytes / 1024 / 1024;
 
     if (mb >= 1) {
       return `${mb.toFixed(2)} MB`;
     }
 
-    return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(
+      bytes / 1024
+    ).toFixed(1)} KB`;
   };
 
   // ==========================================
@@ -276,73 +315,27 @@ const SubmitAssignment = () => {
 
   return (
     <div className="relative min-h-screen overflow-hidden bg-gradient-to-br from-emerald-50 via-white to-green-50 px-5 py-10 text-slate-900">
-      {/* ======================================
-          AMBIENT BACKGROUND
-      ====================================== */}
+
+      {/* BACKGROUND */}
 
       <div className="pointer-events-none absolute -left-32 top-0 h-96 w-96 rounded-full bg-emerald-400/10 blur-3xl" />
 
       <div className="pointer-events-none absolute right-[-120px] top-1/4 h-[28rem] w-[28rem] rounded-full bg-green-400/10 blur-3xl" />
 
-      <div className="pointer-events-none absolute bottom-[-140px] left-1/3 h-96 w-96 rounded-full bg-lime-300/10 blur-3xl" />
-
-      {/* Floating Particles */}
-      <motion.div
-        animate={{
-          y: [0, -15, 0],
-          opacity: [0.2, 0.7, 0.2],
-        }}
-        transition={{
-          duration: 4,
-          repeat: Infinity,
-          ease: "easeInOut",
-        }}
-        className="pointer-events-none absolute left-[8%] top-28 h-2 w-2 rounded-full bg-emerald-400"
-      />
-
-      <motion.div
-        animate={{
-          y: [0, 18, 0],
-          opacity: [0.2, 0.6, 0.2],
-        }}
-        transition={{
-          duration: 5,
-          repeat: Infinity,
-          ease: "easeInOut",
-        }}
-        className="pointer-events-none absolute right-[12%] top-44 h-3 w-3 rounded-full bg-green-400"
-      />
-
-      <motion.div
-        animate={{
-          x: [0, 10, 0],
-          y: [0, -10, 0],
-        }}
-        transition={{
-          duration: 4.5,
-          repeat: Infinity,
-          ease: "easeInOut",
-        }}
-        className="pointer-events-none absolute bottom-36 left-[15%] h-2 w-2 rounded-full bg-lime-400"
-      />
-
       <div className="relative z-10 mx-auto max-w-3xl">
 
-        {/* ======================================
-            BACK BUTTON
-        ====================================== */}
+        {/* BACK */}
 
         <Link
           to="/student/assignments"
-          className="group inline-flex items-center gap-2 text-sm font-semibold text-emerald-700 transition hover:text-emerald-900"
+          className="group inline-flex items-center gap-2 text-sm font-semibold text-emerald-700 hover:text-emerald-900"
         >
-          <ArrowLeft className="h-4 w-4 transition-transform duration-300 group-hover:-translate-x-1" />
+          <ArrowLeft className="h-4 w-4 transition group-hover:-translate-x-1" />
+
           Back to My Assignments
         </Link>
 
-        {/* ======================================
-            HEADER
-        ====================================== */}
+        {/* HEADER */}
 
         <motion.div
           initial={{
@@ -353,13 +346,11 @@ const SubmitAssignment = () => {
             opacity: 1,
             y: 0,
           }}
-          transition={{
-            duration: 0.5,
-          }}
           className="mt-8"
         >
-          <div className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-white/80 px-3 py-1.5 text-xs font-bold text-emerald-700 shadow-sm backdrop-blur-xl">
-            <FileText className="h-4 w-4" />
+          <div className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-white/80 px-3 py-1.5 text-xs font-bold text-emerald-700 shadow-sm">
+            <Sparkles className="h-4 w-4" />
+
             Assignment Submission
           </div>
 
@@ -370,14 +361,11 @@ const SubmitAssignment = () => {
           </h1>
 
           <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-500 sm:text-base">
-            Select your course, upload your assignment,
-            and submit it for admin review.
+            Select an assignment from your enrolled courses and upload your work for admin review.
           </p>
         </motion.div>
 
-        {/* ======================================
-            FORM
-        ====================================== */}
+        {/* FORM */}
 
         <motion.form
           initial={{
@@ -388,34 +376,25 @@ const SubmitAssignment = () => {
             opacity: 1,
             y: 0,
           }}
-          transition={{
-            duration: 0.5,
-            delay: 0.1,
-          }}
           onSubmit={handleSubmit}
-          className="relative mt-8 overflow-hidden rounded-[2rem] border border-emerald-100 bg-white/90 shadow-2xl shadow-emerald-900/10 backdrop-blur-xl"
+          className="relative mt-8 overflow-hidden rounded-[2rem] border border-emerald-100 bg-white/90 shadow-2xl"
         >
-          {/* Top Accent */}
+
           <div className="absolute left-0 top-0 h-1 w-full bg-gradient-to-r from-emerald-500 via-green-500 to-lime-400" />
 
-          {/* ====================================
-              FORM HEADER
-          ==================================== */}
-
-          <div className="border-b border-emerald-100 bg-gradient-to-r from-emerald-50/80 to-white px-6 py-5 sm:px-8">
+          <div className="border-b border-emerald-100 bg-emerald-50/60 px-6 py-5 sm:px-8">
             <div className="flex items-center gap-3">
               <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-100">
-                <Sparkles className="h-5 w-5 text-emerald-600" />
+                <FileText className="h-5 w-5 text-emerald-600" />
               </div>
 
               <div>
                 <h2 className="font-bold text-slate-800">
-                  Assignment Submission Form
+                  Submission Form
                 </h2>
 
                 <p className="mt-1 text-xs text-slate-500">
-                  Make sure you select the correct course
-                  and file before submitting.
+                  Select the correct assignment before uploading.
                 </p>
               </div>
             </div>
@@ -423,127 +402,154 @@ const SubmitAssignment = () => {
 
           <div className="p-6 sm:p-8">
 
-            {/* ==================================
-                SUCCESS MESSAGE
-            ================================== */}
+            {/* SUCCESS */}
 
             {message && (
-              <motion.div
-                initial={{
-                  opacity: 0,
-                  y: -10,
-                }}
-                animate={{
-                  opacity: 1,
-                  y: 0,
-                }}
-                className="mb-6 flex items-start gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-emerald-700"
-              >
-                <CheckCircle className="mt-0.5 h-5 w-5 shrink-0" />
+              <div className="mb-6 flex items-start gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-emerald-700">
+                <CheckCircle className="h-5 w-5 shrink-0" />
 
                 <div>
                   <p className="font-bold">
                     Submission successful
                   </p>
 
-                  <p className="mt-1 text-sm text-emerald-600">
+                  <p className="mt-1 text-sm">
                     {message}
                   </p>
                 </div>
-              </motion.div>
+              </div>
             )}
 
-            {/* ==================================
-                ERROR MESSAGE
-            ================================== */}
+            {/* ERROR */}
 
             {error && (
-              <motion.div
-                initial={{
-                  opacity: 0,
-                  y: -10,
-                }}
-                animate={{
-                  opacity: 1,
-                  y: 0,
-                }}
-                className="mb-6 flex items-start gap-3 rounded-2xl border border-red-200 bg-red-50 p-4 text-red-700"
-              >
-                <AlertCircle className="mt-0.5 h-5 w-5 shrink-0" />
+              <div className="mb-6 flex items-start gap-3 rounded-2xl border border-red-200 bg-red-50 p-4 text-red-700">
+                <AlertCircle className="h-5 w-5 shrink-0" />
 
                 <div>
                   <p className="font-bold">
                     Submission error
                   </p>
 
-                  <p className="mt-1 text-sm text-red-600">
+                  <p className="mt-1 text-sm">
                     {error}
                   </p>
+                </div>
+              </div>
+            )}
+
+            {/* ASSIGNMENT SELECT */}
+
+            <div>
+              <label className="mb-2 block text-sm font-bold text-slate-700">
+                Select Assignment
+              </label>
+
+              {loadingAssignments ? (
+                <div className="flex items-center gap-3 rounded-xl border border-emerald-100 bg-emerald-50 px-4 py-4 text-sm text-slate-500">
+                  <Loader2 className="h-5 w-5 animate-spin text-emerald-600" />
+
+                  Loading available assignments...
+                </div>
+              ) : assignments.length === 0 ? (
+                <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-700">
+                  No assignments are currently available for your enrolled courses.
+                </div>
+              ) : (
+                <select
+                  value={assignmentId}
+                  onChange={(e) => {
+                    setAssignmentId(
+                      e.target.value
+                    );
+                    setError("");
+                  }}
+                  disabled={submitting}
+                  className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3.5 text-sm font-medium text-slate-800 outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10"
+                >
+                  <option value="">
+                    Select an assignment
+                  </option>
+
+                  {assignments.map(
+                    (assignment) => (
+                      <option
+                        key={
+                          assignment._id
+                        }
+                        value={
+                          assignment._id
+                        }
+                      >
+                        {assignment.title} —{" "}
+                        {assignment.course
+                          ?.title ||
+                          "Course"}
+                      </option>
+                    )
+                  )}
+                </select>
+              )}
+            </div>
+
+            {/* SELECTED ASSIGNMENT */}
+
+            {selectedAssignment && (
+              <motion.div
+                initial={{
+                  opacity: 0,
+                  y: 10,
+                }}
+                animate={{
+                  opacity: 1,
+                  y: 0,
+                }}
+                className="mt-5 rounded-2xl border border-emerald-100 bg-emerald-50/50 p-5"
+              >
+                <div className="flex items-start gap-3">
+
+                  <BookOpen className="mt-1 h-5 w-5 shrink-0 text-emerald-600" />
+
+                  <div className="min-w-0">
+
+                    <h3 className="font-bold text-slate-900">
+                      {selectedAssignment.title}
+                    </h3>
+
+                    <p className="mt-1 text-sm text-emerald-700">
+                      {selectedAssignment.course
+                        ?.title}
+                    </p>
+
+                    <p className="mt-3 text-sm leading-6 text-slate-600">
+                      {
+                        selectedAssignment.description
+                      }
+                    </p>
+
+                    {selectedAssignment.dueDate && (
+                      <div className="mt-3 inline-flex items-center gap-2 rounded-xl bg-white px-3 py-2 text-xs font-bold text-slate-600">
+                        <CalendarDays className="h-4 w-4 text-emerald-600" />
+
+                        Due{" "}
+                        {new Date(
+                          selectedAssignment.dueDate
+                        ).toLocaleDateString(
+                          "en-IN",
+                          {
+                            day: "2-digit",
+                            month: "short",
+                            year: "numeric",
+                          }
+                        )}
+                      </div>
+                    )}
+                  </div>
                 </div>
               </motion.div>
             )}
 
-            {/* ==================================
-                COURSE
-            ================================== */}
-
-            <div>
-              <label
-                htmlFor="course"
-                className="mb-2 block text-sm font-bold text-slate-700"
-              >
-                Select Course
-              </label>
-
-              {loadingCourses ? (
-                <div className="flex items-center gap-3 rounded-xl border border-emerald-100 bg-emerald-50/50 px-4 py-3.5 text-sm text-slate-500">
-                  <Loader2 className="h-4 w-4 animate-spin text-emerald-600" />
-
-                  Loading available courses...
-                </div>
-              ) : courses.length === 0 ? (
-                <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-4 text-sm text-amber-700">
-                  No courses are currently available.
-                </div>
-              ) : (
-                <div className="relative">
-                  <select
-                    id="course"
-                    value={courseId}
-                    onChange={(e) => {
-                      setCourseId(e.target.value);
-                      setError("");
-                    }}
-                    disabled={submitting}
-                    className="w-full appearance-none rounded-xl border border-slate-200 bg-white px-4 py-3.5 text-sm font-medium text-slate-800 outline-none transition-all duration-300 hover:border-emerald-300 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    <option value="">
-                      Select a course
-                    </option>
-
-                    {courses.map((course) => {
-                      const courseValue =
-                        course._id || course.id;
-
-                      return (
-                        <option
-                          key={courseValue}
-                          value={courseValue}
-                        >
-                          {course.title ||
-                            course.name ||
-                            "Untitled Course"}
-                        </option>
-                      );
-                    })}
-                  </select>
-                </div>
-              )}
-            </div>
-
-            {/* ==================================
-                FILE UPLOAD
-            ================================== */}
+            {/* FILE */}
 
             <div className="mt-7">
               <label className="mb-2 block text-sm font-bold text-slate-700">
@@ -553,57 +559,43 @@ const SubmitAssignment = () => {
               {!file ? (
                 <label
                   htmlFor="assignment-file"
-                  className="group relative flex cursor-pointer flex-col items-center justify-center overflow-hidden rounded-2xl border-2 border-dashed border-emerald-200 bg-gradient-to-br from-emerald-50/60 via-white to-green-50/50 px-6 py-12 text-center transition-all duration-300 hover:border-emerald-400 hover:bg-emerald-50/70 hover:shadow-lg hover:shadow-emerald-900/5"
+                  className="group flex cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed border-emerald-200 bg-emerald-50/40 px-6 py-12 text-center hover:border-emerald-400 hover:bg-emerald-50"
                 >
-                  {/* Hover Glow */}
-                  <div className="pointer-events-none absolute -right-16 -top-16 h-40 w-40 rounded-full bg-emerald-400/10 blur-3xl transition-transform duration-500 group-hover:scale-150" />
+                  <Upload className="h-8 w-8 text-emerald-600" />
 
-                  <motion.div
-                    whileHover={{
-                      scale: 1.08,
-                      y: -3,
-                    }}
-                    className="relative flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-100 to-green-100 shadow-sm"
-                  >
-                    <Upload className="h-7 w-7 text-emerald-600" />
-                  </motion.div>
-
-                  <p className="relative mt-5 font-bold text-slate-800">
+                  <p className="mt-5 font-bold text-slate-800">
                     Click to upload your assignment
                   </p>
 
-                  <p className="relative mt-2 text-sm text-slate-500">
+                  <p className="mt-2 text-sm text-slate-500">
                     PDF, JPG, JPEG, PNG, DOC or DOCX
                   </p>
 
-                  <p className="relative mt-1 text-xs text-slate-400">
+                  <p className="mt-1 text-xs text-slate-400">
                     Maximum file size: 10 MB
                   </p>
 
                   <input
                     id="assignment-file"
                     type="file"
-                    className="hidden"
+                    hidden
                     accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
-                    onChange={handleFileChange}
-                    disabled={submitting}
+                    onChange={
+                      handleFileChange
+                    }
+                    disabled={
+                      submitting
+                    }
                   />
                 </label>
               ) : (
-                <motion.div
-                  initial={{
-                    opacity: 0,
-                    scale: 0.98,
-                  }}
-                  animate={{
-                    opacity: 1,
-                    scale: 1,
-                  }}
-                  className="rounded-2xl border border-emerald-200 bg-gradient-to-br from-emerald-50 to-white p-5 shadow-sm"
-                >
+                <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-5">
+
                   <div className="flex items-center justify-between gap-4">
+
                     <div className="flex min-w-0 items-center gap-4">
-                      <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-white shadow-sm">
+
+                      <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-white">
                         <FileText className="h-6 w-6 text-emerald-600" />
                       </div>
 
@@ -613,17 +605,22 @@ const SubmitAssignment = () => {
                         </p>
 
                         <p className="mt-1 text-xs text-slate-500">
-                          {formatFileSize(file.size)}
+                          {formatFileSize(
+                            file.size
+                          )}
                         </p>
                       </div>
                     </div>
 
                     <button
                       type="button"
-                      onClick={handleRemoveFile}
-                      disabled={submitting}
-                      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-slate-400 transition-all duration-300 hover:bg-red-50 hover:text-red-500 disabled:opacity-50"
-                      title="Remove file"
+                      onClick={
+                        handleRemoveFile
+                      }
+                      disabled={
+                        submitting
+                      }
+                      className="flex h-9 w-9 items-center justify-center rounded-xl text-slate-400 hover:bg-red-50 hover:text-red-500"
                     >
                       <X className="h-5 w-5" />
                     </button>
@@ -631,30 +628,34 @@ const SubmitAssignment = () => {
 
                   <label
                     htmlFor="assignment-file"
-                    className="mt-4 inline-flex cursor-pointer items-center gap-2 rounded-xl border border-emerald-200 bg-white px-4 py-2 text-sm font-bold text-emerald-700 shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:border-emerald-300 hover:bg-emerald-50"
+                    className="mt-4 inline-flex cursor-pointer items-center gap-2 rounded-xl border border-emerald-200 bg-white px-4 py-2 text-sm font-bold text-emerald-700 hover:bg-emerald-50"
                   >
                     <Upload className="h-4 w-4" />
+
                     Choose another file
                   </label>
 
                   <input
                     id="assignment-file"
                     type="file"
-                    className="hidden"
+                    hidden
                     accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
-                    onChange={handleFileChange}
-                    disabled={submitting}
+                    onChange={
+                      handleFileChange
+                    }
+                    disabled={
+                      submitting
+                    }
                   />
-                </motion.div>
+                </div>
               )}
             </div>
 
-            {/* ==================================
-                INFORMATION
-            ================================== */}
+            {/* INFO */}
 
-            <div className="mt-7 rounded-2xl border border-emerald-100 bg-gradient-to-br from-emerald-50/80 to-green-50/50 p-4">
+            <div className="mt-7 rounded-2xl border border-emerald-100 bg-emerald-50/60 p-4">
               <div className="flex gap-3">
+
                 <FileText className="mt-0.5 h-5 w-5 shrink-0 text-emerald-600" />
 
                 <div>
@@ -664,11 +665,11 @@ const SubmitAssignment = () => {
 
                   <ul className="mt-2 space-y-1 text-xs leading-5 text-slate-500">
                     <li>
-                      • Select the correct course.
+                      • Select the correct assignment.
                     </li>
 
                     <li>
-                      • Upload your final assignment file.
+                      • Upload your final work.
                     </li>
 
                     <li>
@@ -676,77 +677,57 @@ const SubmitAssignment = () => {
                     </li>
 
                     <li>
-                      • Your submission will initially be
-                      marked as Pending.
+                      • Allowed: PDF, JPG, JPEG, PNG, DOC, DOCX.
                     </li>
 
                     <li>
-                      • Admin will review your submission.
+                      • Your submission will start as Pending.
+                    </li>
+
+                    <li>
+                      • Admin will review your work.
                     </li>
                   </ul>
                 </div>
               </div>
             </div>
 
-            {/* ==================================
-                SUBMIT BUTTON
-            ================================== */}
+            {/* BUTTON */}
 
             <motion.button
-              whileHover={
-                !submitting &&
-                !loadingCourses &&
-                courses.length > 0
-                  ? {
-                      y: -2,
-                      scale: 1.01,
-                    }
-                  : {}
-              }
-              whileTap={
-                !submitting &&
-                !loadingCourses &&
-                courses.length > 0
-                  ? {
-                      scale: 0.98,
-                    }
-                  : {}
-              }
               type="submit"
               disabled={
                 submitting ||
-                loadingCourses ||
-                courses.length === 0
+                loadingAssignments ||
+                assignments.length === 0
               }
-              className="group relative mt-8 flex w-full items-center justify-center gap-2 overflow-hidden rounded-xl bg-gradient-to-r from-emerald-600 via-green-600 to-lime-500 px-5 py-4 font-bold text-white shadow-lg shadow-emerald-600/20 transition-all duration-300 hover:shadow-xl hover:shadow-emerald-600/30 disabled:cursor-not-allowed disabled:opacity-50"
+              whileHover={{
+                y: -2,
+              }}
+              whileTap={{
+                scale: 0.98,
+              }}
+              className="mt-8 flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-emerald-600 via-green-600 to-lime-500 px-5 py-4 font-bold text-white shadow-lg shadow-emerald-600/20 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {/* Shine */}
-              <span className="absolute inset-0 -translate-x-full bg-white/15 transition-transform duration-500 group-hover:translate-x-full" />
+              {submitting ? (
+                <>
+                  <Loader2 className="h-5 w-5 animate-spin" />
 
-              <span className="relative z-10 flex items-center gap-2">
-                {submitting ? (
-                  <>
-                    <Loader2 className="h-5 w-5 animate-spin" />
-                    Submitting Assignment...
-                  </>
-                ) : (
-                  <>
-                    <Upload className="h-5 w-5" />
-                    Submit Assignment
-                  </>
-                )}
-              </span>
+                  Submitting...
+                </>
+              ) : (
+                <>
+                  <Upload className="h-5 w-5" />
+
+                  Submit Assignment
+                </>
+              )}
             </motion.button>
           </div>
         </motion.form>
 
-        {/* ======================================
-            BOTTOM NOTE
-        ====================================== */}
-
         <p className="mt-5 text-center text-xs text-slate-400">
-          After submission, you can track your assignment
-          status from My Assignments.
+          You can track your submission status and admin feedback from My Assignments.
         </p>
       </div>
     </div>
