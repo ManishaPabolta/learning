@@ -1,43 +1,41 @@
 import api from "./api";
 
-/*
-|--------------------------------------------------------------------------
-| Get Courses
-|--------------------------------------------------------------------------
-|
-| Supports:
-| ?page=1
-| ?limit=10
-| ?search=react
-|
-*/
+// =====================================================
+// GET COURSES
+// =====================================================
 
 export const getCourses = async ({
   page = 1,
   limit = 10,
   search = "",
 } = {}) => {
-  const response = await api.get(
-    "/courses",
-    {
-      params: {
-        page,
-        limit,
-        search,
-      },
-    }
+  const response = await api.get("/courses", {
+    params: {
+      page,
+      limit,
+      search,
+    },
+  });
+
+  console.log(
+    "GET COURSES RESPONSE:",
+    response.data
   );
 
   return response.data;
 };
 
-/*
-|--------------------------------------------------------------------------
-| Get Course By ID
-|--------------------------------------------------------------------------
-*/
+// =====================================================
+// GET COURSE BY ID
+// =====================================================
 
 export const getCourseById = async (id) => {
+  if (!id) {
+    throw new Error(
+      "Course ID is required"
+    );
+  }
+
   const response = await api.get(
     `/courses/${id}`
   );
@@ -45,14 +43,19 @@ export const getCourseById = async (id) => {
   return response.data;
 };
 
-/*
-|--------------------------------------------------------------------------
-| Create Course
-|--------------------------------------------------------------------------
-| Admin only
-*/
+// =====================================================
+// CREATE COURSE
+// =====================================================
+// Admin only
+// =====================================================
 
 export const createCourse = async (data) => {
+  if (!data) {
+    throw new Error(
+      "Course data is required"
+    );
+  }
+
   const response = await api.post(
     "/courses",
     data
@@ -61,17 +64,28 @@ export const createCourse = async (data) => {
   return response.data;
 };
 
-/*
-|--------------------------------------------------------------------------
-| Update Course
-|--------------------------------------------------------------------------
-| PATCH /courses/:id
-*/
+// =====================================================
+// UPDATE COURSE
+// =====================================================
+// PATCH /courses/:id
+// =====================================================
 
 export const updateCourse = async (
   id,
   data
 ) => {
+  if (!id) {
+    throw new Error(
+      "Course ID is required"
+    );
+  }
+
+  if (!data) {
+    throw new Error(
+      "Course data is required"
+    );
+  }
+
   const response = await api.patch(
     `/courses/${id}`,
     data
@@ -80,13 +94,17 @@ export const updateCourse = async (
   return response.data;
 };
 
-/*
-|--------------------------------------------------------------------------
-| Delete Course
-|--------------------------------------------------------------------------
-*/
+// =====================================================
+// DELETE COURSE
+// =====================================================
 
 export const deleteCourse = async (id) => {
+  if (!id) {
+    throw new Error(
+      "Course ID is required"
+    );
+  }
+
   const response = await api.delete(
     `/courses/${id}`
   );
@@ -94,13 +112,17 @@ export const deleteCourse = async (id) => {
   return response.data;
 };
 
-/*
-|--------------------------------------------------------------------------
-| Enroll Course
-|--------------------------------------------------------------------------
-*/
+// =====================================================
+// ENROLL COURSE
+// =====================================================
 
 export const enrollCourse = async (id) => {
+  if (!id) {
+    throw new Error(
+      "Course ID is required"
+    );
+  }
+
   const response = await api.post(
     `/courses/enroll/${id}`
   );

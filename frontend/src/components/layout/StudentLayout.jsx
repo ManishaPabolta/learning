@@ -1,23 +1,33 @@
 import React from "react";
-import { Navigate, Outlet } from "react-router-dom";
+import { Navigate } from "react-router-dom";
 
 import DashboardLayout from "./DashboardLayout";
 import useAuth from "../../hooks/useAuth";
 
 const StudentLayout = () => {
-  const { user, isLoading } = useAuth();
+  const { user, isLoading, loading } = useAuth();
 
-  // Loading
-  if (isLoading) {
+  // =====================================================
+  // AUTH LOADING
+  // =====================================================
+
+  const authLoading =
+    typeof isLoading === "boolean"
+      ? isLoading
+      : loading;
+
+  if (authLoading) {
     return (
       <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-gradient-to-br from-emerald-50 via-white to-green-50">
         {/* Background decorations */}
+
         <div className="pointer-events-none absolute -left-24 -top-24 h-72 w-72 rounded-full bg-emerald-200/30 blur-3xl animate-[float_6s_ease-in-out_infinite]" />
 
         <div className="pointer-events-none absolute -bottom-24 -right-24 h-72 w-72 rounded-full bg-green-200/30 blur-3xl animate-[floatReverse_7s_ease-in-out_infinite]" />
 
         <div className="relative z-10 text-center">
           {/* Loader */}
+
           <div className="relative mx-auto flex h-20 w-20 items-center justify-center">
             <div className="absolute inset-0 rounded-3xl border-4 border-emerald-100" />
 
@@ -29,6 +39,7 @@ const StudentLayout = () => {
           </div>
 
           {/* Text */}
+
           <div className="mt-6 animate-[fadeUp_500ms_ease-out]">
             <h2 className="text-lg font-extrabold tracking-tight text-slate-800">
               Preparing your{" "}
@@ -43,14 +54,13 @@ const StudentLayout = () => {
           </div>
 
           {/* Loading dots */}
+
           <div className="mt-5 flex justify-center gap-1.5">
             <span className="h-2 w-2 rounded-full bg-emerald-500 animate-[loadingDot_1.2s_ease-in-out_infinite]" />
-            <span
-              className="h-2 w-2 rounded-full bg-emerald-400 animate-[loadingDot_1.2s_ease-in-out_200ms_infinite]"
-            />
-            <span
-              className="h-2 w-2 rounded-full bg-green-500 animate-[loadingDot_1.2s_ease-in-out_400ms_infinite]"
-            />
+
+            <span className="h-2 w-2 rounded-full bg-emerald-400 animate-[loadingDot_1.2s_ease-in-out_200ms_infinite]" />
+
+            <span className="h-2 w-2 rounded-full bg-green-500 animate-[loadingDot_1.2s_ease-in-out_400ms_infinite]" />
           </div>
         </div>
 
@@ -119,22 +129,27 @@ const StudentLayout = () => {
     );
   }
 
-  // Not logged in
+  // =====================================================
+  // NOT LOGGED IN
+  // =====================================================
+
   if (!user) {
     return <Navigate to="/login" replace />;
   }
 
-  // Admin cannot access student dashboard
+  // =====================================================
+  // ADMIN CANNOT USE STUDENT ROUTES
+  // =====================================================
+
   if (user.role === "admin") {
     return <Navigate to="/admin" replace />;
   }
 
-  // Student dashboard layout + child pages
-  return (
-    <DashboardLayout role="user">
-      <Outlet />
-    </DashboardLayout>
-  );
+  // =====================================================
+  // STUDENT LAYOUT
+  // =====================================================
+
+  return <DashboardLayout role="user" />;
 };
 
 export default StudentLayout;

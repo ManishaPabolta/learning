@@ -1,4 +1,3 @@
-
 import React, {
   useEffect,
   useRef,
@@ -174,6 +173,594 @@ const Navbar = ({ onMenuClick }) => {
 
   const getNotificationIcon = (type) => {
     switch (type) {
+
+      // ========================================
+      // COURSE CREATED
+      // ========================================
+
+      case "course_created":
+        return (
+          <div
+            className="
+              flex
+              h-10
+              w-10
+              shrink-0
+              items-center
+              justify-center
+              rounded-xl
+              bg-green-50
+              text-green-600
+              transition-all
+              duration-300
+              group-hover:scale-110
+              group-hover:-rotate-3
+              group-hover:bg-green-100
+            "
+          >
+            <GraduationCap className="h-5 w-5" />
+          </div>
+        );
+
+
+      // ========================================
+      // COURSE UPDATED
+      // ========================================
+
+      case "course_updated":
+        return (
+          <div
+            className="
+              flex
+              h-10
+              w-10
+              shrink-0
+              items-center
+              justify-center
+              rounded-xl
+              bg-green-50
+              text-green-600
+              transition-all
+              duration-300
+              group-hover:scale-110
+              group-hover:-rotate-3
+              group-hover:bg-green-100
+            "
+          >
+            <GraduationCap className="h-5 w-5" />
+          </div>
+        );
+
+
+      // ========================================
+      // COURSE DELETED
+      // ========================================
+
+      case "course_deleted":
+        return (
+          <div
+            className="
+              flex
+              h-10
+              w-10
+              shrink-0
+              items-center
+              justify-center
+              rounded-xl
+              bg-red-50
+              text-red-500
+              transition-all
+              duration-300
+              group-hover:scale-110
+              group-hover:-rotate-3
+              group-hover:bg-red-100
+            "
+          >
+            <GraduationCap className="h-5 w-5" />
+          </div>
+        );
+
+
+      // ========================================
+      // COURSE ENROLLED
+      // ========================================
+
+      case "course_enrolled":
+        return (
+          <div
+            className="
+              flex
+              h-10
+              w-10
+              shrink-0
+              items-center
+              justify-center
+              rounded-xl
+              bg-lime-50
+              text-lime-600
+              transition-all
+              duration-300
+              group-hover:scale-110
+              group-hover:rotate-3
+              group-hover:bg-lime-100
+            "
+          >
+            <Check className="h-5 w-5" />
+          </div>
+        );
+
+
+      // ========================================
+      // ASSIGNMENT CREATED
+      // ========================================
+
+      case "assignment_created":
+        return (
+          <div
+            className="
+              flex
+              h-10
+              w-10
+              shrink-0
+              items-center
+              justify-center
+              rounded-xl
+              bg-emerald-50
+              text-emerald-600
+              transition-all
+              duration-300
+              group-hover:scale-110
+              group-hover:rotate-3
+              group-hover:bg-emerald-100
+            "
+          >
+            <FileText className="h-5 w-5" />
+          </div>
+        );
+
+
+      // ========================================
+      // ASSIGNMENT UPDATED
+      // ========================================
+
+      case "assignment_updated":
+        return (
+          <div
+            className="
+              flex
+              h-10
+              w-10
+              shrink-0
+              items-center
+              justify-center
+              rounded-xl
+              bg-green-50
+              text-green-600
+              transition-all
+              duration-300
+              group-hover:scale-110
+              group-hover:rotate-3
+              group-hover:bg-green-100
+            "
+          >
+            <FileText className="h-5 w-5" />
+          </div>
+        );
+
+
+      // ========================================
+      // ASSIGNMENT DELETED
+      // ========================================
+
+      case "assignment_deleted":
+        return (
+          <div
+            className="
+              flex
+              h-10
+              w-10
+              shrink-0
+              items-center
+              justify-center
+              rounded-xl
+              bg-red-50
+              text-red-500
+              transition-all
+              duration-300
+              group-hover:scale-110
+              group-hover:rotate-3
+              group-hover:bg-red-100
+            "
+          >
+            <FileText className="h-5 w-5" />
+          </div>
+        );
+
+
+      // ========================================
+      // ASSIGNMENT SUBMITTED
+      // ========================================
+
+      case "assignment_submitted":
+        return (
+          <div
+            className="
+              flex
+              h-10
+              w-10
+              shrink-0
+              items-center
+              justify-center
+              rounded-xl
+              bg-blue-50
+              text-blue-600
+              transition-all
+              duration-300
+              group-hover:scale-110
+              group-hover:-rotate-3
+              group-hover:bg-blue-100
+            "
+          >
+            <FileText className="h-5 w-5" />
+          </div>
+        );
+
+
+      // ========================================
+      // ASSIGNMENT RESUBMITTED
+      // ========================================
+
+      case "assignment_resubmitted":
+        return (
+          <div
+            className="
+              flex
+              h-10
+              w-10
+              shrink-0
+              items-center
+              justify-center
+              rounded-xl
+              bg-indigo-50
+              text-indigo-600
+              transition-all
+              duration-300
+              group-hover:scale-110
+              group-hover:rotate-3
+              group-hover:bg-indigo-100
+            "
+          >
+            <FileText className="h-5 w-5" />
+          </div>
+        );
+
+
+      // ========================================
+      // ASSIGNMENT APPROVED
+      // ========================================
+
+      case "assignment_approved":
+        return (
+          <div
+            className="
+              flex
+              h-10
+              w-10
+              shrink-0
+              items-center
+              justify-center
+              rounded-xl
+              bg-lime-50
+              text-lime-600
+              transition-all
+              duration-300
+              group-hover:scale-110
+              group-hover:rotate-3
+              group-hover:bg-lime-100
+            "
+          >
+            <Check className="h-5 w-5" />
+          </div>
+        );
+
+
+      // ========================================
+      // ASSIGNMENT REJECTED
+      // ========================================
+
+      case "assignment_rejected":
+        return (
+          <div
+            className="
+              flex
+              h-10
+              w-10
+              shrink-0
+              items-center
+              justify-center
+              rounded-xl
+              bg-red-50
+              text-red-500
+              transition-all
+              duration-300
+              group-hover:scale-110
+              group-hover:-rotate-3
+              group-hover:bg-red-100
+            "
+          >
+            <X className="h-5 w-5" />
+          </div>
+        );
+
+
+      // ========================================
+      // PROJECT CREATED
+      // ========================================
+
+      case "project_created":
+        return (
+          <div
+            className="
+              flex
+              h-10
+              w-10
+              shrink-0
+              items-center
+              justify-center
+              rounded-xl
+              bg-emerald-50
+              text-emerald-600
+              transition-all
+              duration-300
+              group-hover:scale-110
+              group-hover:rotate-3
+              group-hover:bg-emerald-100
+            "
+          >
+            <Info className="h-5 w-5" />
+          </div>
+        );
+
+
+      // ========================================
+      // PROJECT UPDATED
+      // ========================================
+
+      case "project_updated":
+        return (
+          <div
+            className="
+              flex
+              h-10
+              w-10
+              shrink-0
+              items-center
+              justify-center
+              rounded-xl
+              bg-green-50
+              text-green-600
+              transition-all
+              duration-300
+              group-hover:scale-110
+              group-hover:-rotate-3
+              group-hover:bg-green-100
+            "
+          >
+            <Info className="h-5 w-5" />
+          </div>
+        );
+
+
+      // ========================================
+      // PROJECT DELETED
+      // ========================================
+
+      case "project_deleted":
+        return (
+          <div
+            className="
+              flex
+              h-10
+              w-10
+              shrink-0
+              items-center
+              justify-center
+              rounded-xl
+              bg-red-50
+              text-red-500
+              transition-all
+              duration-300
+              group-hover:scale-110
+              group-hover:rotate-3
+              group-hover:bg-red-100
+            "
+          >
+            <X className="h-5 w-5" />
+          </div>
+        );
+
+
+      // ========================================
+      // PROJECT APPROVED
+      // ========================================
+
+      case "project_approved":
+        return (
+          <div
+            className="
+              flex
+              h-10
+              w-10
+              shrink-0
+              items-center
+              justify-center
+              rounded-xl
+              bg-lime-50
+              text-lime-600
+              transition-all
+              duration-300
+              group-hover:scale-110
+              group-hover:rotate-3
+              group-hover:bg-lime-100
+            "
+          >
+            <Check className="h-5 w-5" />
+          </div>
+        );
+
+
+      // ========================================
+      // PROJECT REJECTED
+      // ========================================
+
+      case "project_rejected":
+        return (
+          <div
+            className="
+              flex
+              h-10
+              w-10
+              shrink-0
+              items-center
+              justify-center
+              rounded-xl
+              bg-red-50
+              text-red-500
+              transition-all
+              duration-300
+              group-hover:scale-110
+              group-hover:-rotate-3
+              group-hover:bg-red-100
+            "
+          >
+            <X className="h-5 w-5" />
+          </div>
+        );
+
+
+      // ========================================
+      // PROJECT INVITATION
+      // ========================================
+
+      case "project_invitation":
+        return (
+          <div
+            className="
+              flex
+              h-10
+              w-10
+              shrink-0
+              items-center
+              justify-center
+              rounded-xl
+              bg-amber-50
+              text-amber-600
+              transition-all
+              duration-300
+              group-hover:scale-110
+              group-hover:rotate-3
+              group-hover:bg-amber-100
+            "
+          >
+            <Bell className="h-5 w-5" />
+          </div>
+        );
+
+
+      // ========================================
+      // PROJECT INVITATION ACCEPTED
+      // ========================================
+
+      case "project_invitation_accepted":
+        return (
+          <div
+            className="
+              flex
+              h-10
+              w-10
+              shrink-0
+              items-center
+              justify-center
+              rounded-xl
+              bg-green-50
+              text-green-600
+              transition-all
+              duration-300
+              group-hover:scale-110
+              group-hover:rotate-3
+              group-hover:bg-green-100
+            "
+          >
+            <Check className="h-5 w-5" />
+          </div>
+        );
+
+
+      // ========================================
+      // PROJECT INVITATION DECLINED
+      // ========================================
+
+      case "project_invitation_declined":
+        return (
+          <div
+            className="
+              flex
+              h-10
+              w-10
+              shrink-0
+              items-center
+              justify-center
+              rounded-xl
+              bg-red-50
+              text-red-500
+              transition-all
+              duration-300
+              group-hover:scale-110
+              group-hover:-rotate-3
+              group-hover:bg-red-100
+            "
+          >
+            <X className="h-5 w-5" />
+          </div>
+        );
+
+
+      // ========================================
+      // USER REGISTERED
+      // ========================================
+
+      case "user_registered":
+        return (
+          <div
+            className="
+              flex
+              h-10
+              w-10
+              shrink-0
+              items-center
+              justify-center
+              rounded-xl
+              bg-blue-50
+              text-blue-600
+              transition-all
+              duration-300
+              group-hover:scale-110
+              group-hover:rotate-3
+              group-hover:bg-blue-100
+            "
+          >
+            <Info className="h-5 w-5" />
+          </div>
+        );
+
+
+      // ========================================
+      // OLD TYPES
+      // ========================================
+      // Ye fallback compatibility ke liye rakhe hain.
+      // Agar database me purane notifications hain
+      // to unke icons bhi properly show honge.
+
       case "assignment":
         return (
           <div
@@ -197,6 +784,7 @@ const Navbar = ({ onMenuClick }) => {
             <FileText className="h-5 w-5" />
           </div>
         );
+
 
       case "course":
         return (
@@ -222,6 +810,7 @@ const Navbar = ({ onMenuClick }) => {
           </div>
         );
 
+
       case "success":
         return (
           <div
@@ -246,6 +835,7 @@ const Navbar = ({ onMenuClick }) => {
           </div>
         );
 
+
       case "warning":
         return (
           <div
@@ -269,6 +859,11 @@ const Navbar = ({ onMenuClick }) => {
             <Info className="h-5 w-5" />
           </div>
         );
+
+
+      // ========================================
+      // DEFAULT
+      // ========================================
 
       default:
         return (
@@ -1560,53 +2155,53 @@ const Navbar = ({ onMenuClick }) => {
 
                 {/* PROFILE */}
 
-        <Link
-  to={
-    user?.role === "admin"
-      ? "/admin/profile"
-      : "/student/profile"
-  }
-  onClick={() => setProfileOpen(false)}
-  className="
-    group
-    flex
-    items-center
-    gap-3
-    px-4
-    py-3
-    text-sm
-    font-medium
-    text-slate-600
-    transition-all
-    duration-300
-    hover:translate-x-1
-    hover:bg-emerald-50
-    hover:text-emerald-700
-  "
->
-  <span
-    className="
-      flex
-      h-8
-      w-8
-      items-center
-      justify-center
-      rounded-lg
-      bg-emerald-50
-      text-base
-      transition-all
-      duration-300
-      group-hover:scale-110
-      group-hover:bg-emerald-100
-    "
-  >
-    👤
-  </span>
+                <Link
+                  to={
+                    user?.role === "admin"
+                      ? "/admin/profile"
+                      : "/student/profile"
+                  }
+                  onClick={() => setProfileOpen(false)}
+                  className="
+                    group
+                    flex
+                    items-center
+                    gap-3
+                    px-4
+                    py-3
+                    text-sm
+                    font-medium
+                    text-slate-600
+                    transition-all
+                    duration-300
+                    hover:translate-x-1
+                    hover:bg-emerald-50
+                    hover:text-emerald-700
+                  "
+                >
+                  <span
+                    className="
+                      flex
+                      h-8
+                      w-8
+                      items-center
+                      justify-center
+                      rounded-lg
+                      bg-emerald-50
+                      text-base
+                      transition-all
+                      duration-300
+                      group-hover:scale-110
+                      group-hover:bg-emerald-100
+                    "
+                  >
+                    👤
+                  </span>
 
-  <span>
-    My Profile
-  </span>
-</Link>
+                  <span>
+                    My Profile
+                  </span>
+                </Link>
 
 
                 {/* LOGOUT */}
@@ -1772,4 +2367,3 @@ const Navbar = ({ onMenuClick }) => {
 };
 
 export default Navbar;
-

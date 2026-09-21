@@ -6,17 +6,21 @@ const fs = require("fs");
 // UPLOAD DIRECTORY
 // =====================================================
 
-const uploadDir = path.join(
-  __dirname,
-  "..",
-  "uploads"
-);
+const uploadDir = path.join(__dirname, "../uploads");
 
 if (!fs.existsSync(uploadDir)) {
-  fs.mkdirSync(uploadDir, {
-    recursive: true,
-  });
+  fs.mkdirSync(uploadDir, { recursive: true });
 }
+
+// =====================================================
+// SAFE FILE NAME
+// =====================================================
+
+const sanitizeFileName = (fileName) => {
+  return fileName
+    .replace(/[^a-zA-Z0-9._-]/g, "_")
+    .replace(/_+/g, "_");
+};
 
 // =====================================================
 // STORAGE
@@ -28,48 +32,33 @@ const storage = multer.diskStorage({
   },
 
   filename: function (req, file, cb) {
-    const uniqueName =
-      Date.now() +
-      "-" +
-      Math.round(Math.random() * 1e9);
+    const ext = path.extname(file.originalname);
+    const baseName = path.basename(file.originalname, ext);
 
-    const extension = path.extname(
-      file.originalname
-    );
+    const safeName = sanitizeFileName(baseName);
 
-    cb(
-      null,
-      uniqueName + extension
-    );
+    const uniqueName = `${Date.now()}-${Math.round(
+      Math.random() * 1e9
+    )}-${safeName}${ext}`;
+
+    cb(null, uniqueName);
   },
 });
 
 // =====================================================
 // FILE FILTER
 // =====================================================
+// IMPORTANT:
+// Project files can be code, documents, images, PDFs etc.
+// So DON'T unnecessarily block extensions.
+// =====================================================
 
 const fileFilter = (req, file, cb) => {
-  const allowedTypes = [
-    "application/pdf",
-
-    "image/png",
-    "image/jpg",
-    "image/jpeg",
-
-    "application/msword",
-
-    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-  ];
-
-  if (allowedTypes.includes(file.mimetype)) {
-    cb(null, true);
-  } else {
-    cb(
-      new Error(
-        "Only PDF, JPG, JPEG, PNG, DOC and DOCX files are allowed"
-      )
-    );
+  if (!file) {
+    return cb(new Error("No file received"));
   }
+
+  cb(null, true);
 };
 
 // =====================================================
@@ -82,7 +71,7 @@ const upload = multer({
   fileFilter,
 
   limits: {
-    fileSize: 10 * 1024 * 1024,
+    fileSize: 100 * 1024 * 1024, // 100 MB
   },
 });
 

@@ -6,6 +6,12 @@ const Course = require("../models/Course");
 
 const cloudinary = require("../config/cloudinary");
 
+const {
+  createNotification,
+  notifyAdmins,
+  notifyCourseStudents,
+} = require("../services/notificationService");
+
 // =====================================================
 // HELPER - CLOUDINARY RESOURCE TYPE
 // =====================================================
@@ -97,7 +103,8 @@ const createAssignment = async (req, res) => {
 
       return res.status(400).json({
         success: false,
-        message: "Assignment description is required",
+        message:
+          "Assignment description is required",
       });
     }
 
@@ -185,17 +192,11 @@ const createAssignment = async (req, res) => {
 
     const assignment = await Assignment.create({
       title: title.trim(),
-
       description: description.trim(),
-
       course: courseId,
-
       createdBy: req.user._id,
-
       dueDate: new Date(dueDate),
-
       ...attachmentData,
-
       isActive: true,
     });
 
@@ -206,13 +207,43 @@ const createAssignment = async (req, res) => {
     await assignment.populate([
       {
         path: "course",
-        select: "title category",
+        select: "title category students",
       },
       {
         path: "createdBy",
         select: "name email",
       },
     ]);
+
+    // =================================================
+    // NOTIFY ENROLLED STUDENTS
+    // =================================================
+
+    await notifyCourseStudents({
+      courseId: course._id,
+
+      sender: req.user._id,
+
+      type: "assignment_created",
+
+      title: "New Assignment Added",
+
+      message: `A new assignment "${assignment.title}" has been added to "${course.title}".`,
+
+      course: course._id,
+
+      assignment: assignment._id,
+
+      link: `/student/assignments/${assignment._id}`,
+
+      metadata: {
+        assignmentId: assignment._id,
+        assignmentTitle: assignment.title,
+        courseId: course._id,
+        courseTitle: course.title,
+        action: "created",
+      },
+    });
 
     return res.status(201).json({
       success: true,
@@ -332,10 +363,6 @@ const getAvailableAssignments = async (
   res
 ) => {
   try {
-    // -----------------------------------------------
-    // FIND COURSES WHERE STUDENT IS ENROLLED
-    // -----------------------------------------------
-
     const courses = await Course.find({
       students: req.user._id,
     }).select("_id");
@@ -343,10 +370,6 @@ const getAvailableAssignments = async (
     const courseIds = courses.map(
       (course) => course._id
     );
-
-    // -----------------------------------------------
-    // FIND ASSIGNMENTS FOR THOSE COURSES
-    // -----------------------------------------------
 
     const assignments =
       await Assignment.find({
@@ -370,10 +393,6 @@ const getAvailableAssignments = async (
         })
         .lean();
 
-    // -----------------------------------------------
-    // FIND CURRENT STUDENT SUBMISSIONS
-    // -----------------------------------------------
-
     const assignmentIds =
       assignments.map(
         (assignment) => assignment._id
@@ -395,10 +414,6 @@ const getAvailableAssignments = async (
         submission.assignment.toString()
       ] = submission;
     });
-
-    // -----------------------------------------------
-    // ATTACH SUBMISSION TO ASSIGNMENT
-    // -----------------------------------------------
 
     const result = assignments.map(
       (assignment) => ({
@@ -519,10 +534,6 @@ const getAssignmentById = async (
       });
     }
 
-    // -----------------------------------------------
-    // CHECK STUDENT ENROLLMENT
-    // -----------------------------------------------
-
     const isEnrolled =
       assignment.course?.students?.some(
         (studentId) =>
@@ -540,10 +551,6 @@ const getAssignmentById = async (
           "You are not enrolled in this course",
       });
     }
-
-    // -----------------------------------------------
-    // GET STUDENT SUBMISSION
-    // -----------------------------------------------
 
     let submission = null;
 
@@ -620,7 +627,7 @@ const submitAssignment = async (
     }
 
     // -----------------------------------------------
-    // CHECK ENROLLMENT
+    // CHECK COURSE
     // -----------------------------------------------
 
     const course =
@@ -637,6 +644,10 @@ const submitAssignment = async (
           "Assignment course not found",
       });
     }
+
+    // -----------------------------------------------
+    // CHECK ENROLLMENT
+    // -----------------------------------------------
 
     const isEnrolled =
       course.students.some(
@@ -694,7 +705,7 @@ const submitAssignment = async (
     }
 
     // -----------------------------------------------
-    // UPLOAD NEW FILE
+    // UPLOAD FILE
     // -----------------------------------------------
 
     const resourceType =
@@ -720,9 +731,9 @@ const submitAssignment = async (
       deleteLocalFile(req.file.path);
     }
 
-    // -----------------------------------------------
-    // REJECTED = RESUBMISSION
-    // -----------------------------------------------
+    // =================================================
+    // RESUBMISSION
+    // =================================================
 
     if (existingSubmission) {
       const oldPublicId =
@@ -756,13 +767,58 @@ const submitAssignment = async (
 
       await existingSubmission.save();
 
-      // Delete old file
+      // Delete old Cloudinary file
       if (oldPublicId) {
         await deleteCloudinaryFile(
           oldPublicId,
           oldFileType
         );
       }
+
+      // =============================================
+      // NOTIFY ADMINS
+      // =============================================
+
+      await notifyAdmins({
+        sender: req.user._id,
+
+        type: "assignment_resubmitted",
+
+        title: "Assignment Resubmitted",
+
+        message: `${req.user.name || "A student"} resubmitted "${assignment.title}".`,
+
+        assignment: assignment._id,
+
+        course: course._id,
+
+        link: "/admin/assignments",
+
+        metadata: {
+          assignmentId:
+            assignment._id,
+
+          assignmentTitle:
+            assignment.title,
+
+          studentId:
+            req.user._id,
+
+          studentName:
+            req.user.name,
+
+          courseId:
+            course._id,
+
+          courseTitle:
+            course.title,
+
+          submissionId:
+            existingSubmission._id,
+
+          action: "resubmitted",
+        },
+      });
 
       return res.status(200).json({
         success: true,
@@ -772,9 +828,9 @@ const submitAssignment = async (
       });
     }
 
-    // -----------------------------------------------
+    // =================================================
     // FIRST SUBMISSION
-    // -----------------------------------------------
+    // =================================================
 
     const submission =
       await AssignmentSubmission.create({
@@ -800,6 +856,51 @@ const submitAssignment = async (
 
         submittedAt: new Date(),
       });
+
+    // =============================================
+    // NOTIFY ADMINS
+    // =============================================
+
+    await notifyAdmins({
+      sender: req.user._id,
+
+      type: "assignment_submitted",
+
+      title: "New Assignment Submission",
+
+      message: `${req.user.name || "A student"} submitted "${assignment.title}".`,
+
+      assignment: assignment._id,
+
+      course: course._id,
+
+      link: "/admin/assignments",
+
+      metadata: {
+        assignmentId:
+          assignment._id,
+
+        assignmentTitle:
+          assignment.title,
+
+        studentId:
+          req.user._id,
+
+        studentName:
+          req.user.name,
+
+        courseId:
+          course._id,
+
+        courseTitle:
+          course.title,
+
+        submissionId:
+          submission._id,
+
+        action: "submitted",
+      },
+    });
 
     return res.status(201).json({
       success: true,
@@ -977,6 +1078,40 @@ const updateSubmission = async (
         oldFileType
       );
     }
+
+    // =============================================
+    // NOTIFY ADMINS
+    // =============================================
+
+    await notifyAdmins({
+      sender: req.user._id,
+
+      type: "assignment_resubmitted",
+
+      title: "Assignment Resubmitted",
+
+      message: `${req.user.name || "A student"} resubmitted an assignment.`,
+
+      assignment: submission.assignment,
+
+      link: "/admin/assignments",
+
+      metadata: {
+        assignmentId:
+          submission.assignment,
+
+        studentId:
+          req.user._id,
+
+        studentName:
+          req.user.name,
+
+        submissionId:
+          submission._id,
+
+        action: "resubmitted",
+      },
+    });
 
     return res.status(200).json({
       success: true,
@@ -1158,6 +1293,62 @@ const approveSubmission = async (
       },
     ]);
 
+    // =============================================
+    // NOTIFY STUDENT
+    // =============================================
+
+    const studentId =
+      submission.student?._id ||
+      submission.student;
+
+    const assignmentTitle =
+      submission.assignment?.title ||
+      "your assignment";
+
+    const courseTitle =
+      submission.assignment?.course?.title ||
+      "";
+
+    const assignmentId =
+      submission.assignment?._id ||
+      submission.assignment;
+
+    await createNotification({
+      recipient: studentId,
+
+      sender: req.user._id,
+
+      type: "assignment_approved",
+
+      title: "Assignment Approved",
+
+      message: courseTitle
+        ? `Your assignment "${assignmentTitle}" for "${courseTitle}" has been approved.`
+        : `Your assignment "${assignmentTitle}" has been approved.`,
+
+      assignment: assignmentId,
+
+      link: `/student/assignments/${assignmentId}`,
+
+      metadata: {
+        assignmentId,
+
+        assignmentTitle,
+
+        courseTitle,
+
+        submissionId:
+          submission._id,
+
+        status: "approved",
+
+        feedback:
+          submission.feedback,
+
+        action: "approved",
+      },
+    });
+
     return res.status(200).json({
       success: true,
       message:
@@ -1246,6 +1437,62 @@ const rejectSubmission = async (
       },
     ]);
 
+    // =============================================
+    // NOTIFY STUDENT
+    // =============================================
+
+    const studentId =
+      submission.student?._id ||
+      submission.student;
+
+    const assignmentTitle =
+      submission.assignment?.title ||
+      "your assignment";
+
+    const courseTitle =
+      submission.assignment?.course?.title ||
+      "";
+
+    const assignmentId =
+      submission.assignment?._id ||
+      submission.assignment;
+
+    await createNotification({
+      recipient: studentId,
+
+      sender: req.user._id,
+
+      type: "assignment_rejected",
+
+      title: "Assignment Needs Resubmission",
+
+      message: courseTitle
+        ? `Your assignment "${assignmentTitle}" for "${courseTitle}" was rejected. Please review the feedback and resubmit.`
+        : `Your assignment "${assignmentTitle}" was rejected. Please review the feedback and resubmit.`,
+
+      assignment: assignmentId,
+
+      link: `/student/assignments/${assignmentId}`,
+
+      metadata: {
+        assignmentId,
+
+        assignmentTitle,
+
+        courseTitle,
+
+        submissionId:
+          submission._id,
+
+        status: "rejected",
+
+        feedback:
+          submission.feedback,
+
+        action: "rejected",
+      },
+    });
+
     return res.status(200).json({
       success: true,
       message:
@@ -1289,6 +1536,47 @@ const deleteAssignment = async (
       return res.status(404).json({
         success: false,
         message: "Assignment not found",
+      });
+    }
+
+    // -----------------------------------------------
+    // GET COURSE + STUDENTS
+    // -----------------------------------------------
+
+    const course =
+      await Course.findById(
+        assignment.course
+      ).select("title students");
+
+    // =================================================
+    // NOTIFY STUDENTS BEFORE DELETE
+    // =================================================
+
+    if (course?.students?.length > 0) {
+      await notifyCourseStudents({
+        courseId: course._id,
+
+        sender: req.user._id,
+
+        type: "assignment_deleted",
+
+        title: "Assignment Removed",
+
+        message: `The assignment "${assignment.title}" from "${course.title}" has been removed.`,
+
+        course: course._id,
+
+        assignment: assignment._id,
+
+        link: "/student/assignments",
+
+        metadata: {
+          assignmentId: assignment._id,
+          assignmentTitle: assignment.title,
+          courseId: course._id,
+          courseTitle: course.title,
+          action: "deleted",
+        },
       });
     }
 
@@ -1374,7 +1662,5 @@ module.exports = {
   deleteSubmission,
   approveSubmission,
   rejectSubmission,
-
-  // IMPORTANT
   deleteAssignment,
 };

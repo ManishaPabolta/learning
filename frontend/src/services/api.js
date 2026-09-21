@@ -37,15 +37,18 @@ const processQueue = (error, token = null) => {
 // ======================================================
 
 api.interceptors.request.use(
-  (config) => {
+  (requestConfig) => {
     const token = getAccessToken();
 
     if (token) {
-      config.headers = config.headers || {};
-      config.headers.Authorization = `Bearer ${token}`;
+      requestConfig.headers =
+        requestConfig.headers || {};
+
+      requestConfig.headers.Authorization =
+        `Bearer ${token}`;
     }
 
-    return config;
+    return requestConfig;
   },
 
   (error) => {
@@ -58,14 +61,11 @@ api.interceptors.request.use(
 // ======================================================
 
 api.interceptors.response.use(
-  (response) => {
-    return response;
-  },
+  (response) => response,
 
   async (error) => {
     const originalRequest = error.config;
 
-    // No request config
     if (!originalRequest) {
       return Promise.reject(error);
     }
@@ -73,20 +73,22 @@ api.interceptors.response.use(
     const requestUrl = originalRequest.url || "";
 
     // ==================================================
-    // NEVER REFRESH THESE APIs
+    // DO NOT REFRESH AUTH REQUESTS
     // ==================================================
 
     const excludedRoutes = [
       "/auth/login",
+      "/auth/register",
       "/auth/send-otp",
       "/auth/verify-otp",
       "/auth/refresh-token",
       "/auth/logout",
     ];
 
-    const shouldSkipRefresh = excludedRoutes.some((route) =>
-      requestUrl.includes(route)
-    );
+    const shouldSkipRefresh =
+      excludedRoutes.some((route) =>
+        requestUrl.includes(route)
+      );
 
     if (shouldSkipRefresh) {
       return Promise.reject(error);
@@ -101,7 +103,7 @@ api.interceptors.response.use(
     }
 
     // ==================================================
-    // REQUEST ALREADY RETRIED
+    // PREVENT INFINITE RETRY
     // ==================================================
 
     if (originalRequest._retry) {
@@ -139,34 +141,30 @@ api.interceptors.response.use(
     try {
       const refreshToken = getRefreshToken();
 
-      // No refresh token
       if (!refreshToken) {
         clearAuthStorage();
+
         processQueue(error, null);
 
         return Promise.reject(error);
       }
 
       // ==================================================
-      // CALL REFRESH TOKEN API
+      // REFRESH ACCESS TOKEN
       // ==================================================
 
-      const response = await axios.post(
+      const refreshResponse = await axios.post(
         `${config.API_URL}/auth/refresh-token`,
         {
           refreshToken,
         }
       );
 
-      // ==================================================
-      // GET NEW TOKENS
-      // ==================================================
-
       const newAccessToken =
-        response.data?.accessToken;
+        refreshResponse.data?.accessToken;
 
       const newRefreshToken =
-        response.data?.refreshToken;
+        refreshResponse.data?.refreshToken;
 
       if (!newAccessToken) {
         throw new Error(
@@ -175,7 +173,7 @@ api.interceptors.response.use(
       }
 
       // ==================================================
-      // SAVE NEW ACCESS TOKEN
+      // SAVE NEW TOKENS
       // ==================================================
 
       setAccessToken(newAccessToken);
@@ -185,7 +183,7 @@ api.interceptors.response.use(
       }
 
       // ==================================================
-      // RELEASE WAITING REQUESTS
+      // RETRY WAITING REQUESTS
       // ==================================================
 
       processQueue(null, newAccessToken);

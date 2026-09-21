@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from "react";
-import axios from "axios";
 import { motion } from "framer-motion";
 import {
   Upload,
@@ -14,10 +13,9 @@ import {
   ChevronDown,
 } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
-import useAuth from "../../hooks/useAuth";
 
-const API_URL =
-  import.meta.env.VITE_API_URL || "http://localhost:5000/api";
+import api from "../../services/api";
+import { getCourses } from "../../services/courseService";
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
 
@@ -41,13 +39,20 @@ const ALLOWED_EXTENSIONS = [
 
 const AddAssignment = () => {
   const navigate = useNavigate();
-  const { accessToken } = useAuth();
 
   const fileInputRef = useRef(null);
+
+  // =====================================================
+  // COURSES
+  // =====================================================
 
   const [courses, setCourses] = useState([]);
   const [loadingCourses, setLoadingCourses] = useState(true);
   const [courseError, setCourseError] = useState("");
+
+  // =====================================================
+  // FORM
+  // =====================================================
 
   const [formData, setFormData] = useState({
     title: "",
@@ -56,7 +61,15 @@ const AddAssignment = () => {
     dueDate: "",
   });
 
+  // =====================================================
+  // FILE
+  // =====================================================
+
   const [file, setFile] = useState(null);
+
+  // =====================================================
+  // SUBMIT
+  // =====================================================
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -71,40 +84,74 @@ const AddAssignment = () => {
       setLoadingCourses(true);
       setCourseError("");
 
-      const response = await axios.get(`${API_URL}/courses`, {
-        params: {
-          page: 1,
-          limit: 100,
-        },
-        timeout: 10000,
+      const result = await getCourses({
+        page: 1,
+        limit: 100,
       });
 
-      console.log("COURSES RESPONSE:", response.data);
+      console.log("COURSES API RESPONSE:", result);
 
-      const courseList = Array.isArray(response.data?.courses)
-        ? response.data.courses
-        : [];
+      /*
+        Supports these backend response formats:
+
+        1.
+        {
+          success: true,
+          data: [...]
+        }
+
+        2.
+        {
+          success: true,
+          data: {
+            courses: [...]
+          }
+        }
+
+        3.
+        {
+          success: true,
+          courses: [...]
+        }
+      */
+
+      let courseList = [];
+
+      if (Array.isArray(result?.data)) {
+        courseList = result.data;
+      } else if (Array.isArray(result?.data?.courses)) {
+        courseList = result.data.courses;
+      } else if (Array.isArray(result?.courses)) {
+        courseList = result.courses;
+      }
+
+      console.log("COURSES EXTRACTED:", courseList);
 
       setCourses(courseList);
 
       if (courseList.length === 0) {
-        setCourseError("No courses found. Please create a course first.");
+        setCourseError(
+          "No courses found. Please create a course first."
+        );
       }
     } catch (err) {
       console.error("FETCH COURSES ERROR:", err);
 
-      if (err.code === "ECONNABORTED") {
-        setCourseError("Course request timed out.");
-      } else {
-        setCourseError(
-          err.response?.data?.message ||
-            "Unable to load courses."
-        );
-      }
+      setCourses([]);
+
+      setCourseError(
+        err?.response?.data?.message ||
+          err?.message ||
+          "Unable to load courses."
+      );
     } finally {
       setLoadingCourses(false);
     }
   };
+
+  // =====================================================
+  // LOAD COURSES
+  // =====================================================
 
   useEffect(() => {
     fetchCourses();
@@ -131,19 +178,26 @@ const AddAssignment = () => {
   // =====================================================
 
   const validateFile = (selectedFile) => {
-    if (!selectedFile) return true;
+    if (!selectedFile) {
+      return true;
+    }
 
+    // Size
     if (selectedFile.size > MAX_FILE_SIZE) {
       setError("File size must be less than 10 MB.");
       return false;
     }
 
-    const fileName = selectedFile.name.toLowerCase();
+    const fileName =
+      selectedFile.name?.toLowerCase() || "";
 
-    const validExtension = ALLOWED_EXTENSIONS.some((extension) =>
-      fileName.endsWith(extension)
-    );
+    // Extension
+    const validExtension =
+      ALLOWED_EXTENSIONS.some((extension) =>
+        fileName.endsWith(extension)
+      );
 
+    // MIME
     const validMimeType =
       !selectedFile.type ||
       ALLOWED_TYPES.includes(selectedFile.type);
@@ -152,6 +206,7 @@ const AddAssignment = () => {
       setError(
         "Only PDF, JPG, JPEG, PNG, DOC and DOCX files are allowed."
       );
+
       return false;
     }
 
@@ -163,13 +218,20 @@ const AddAssignment = () => {
   // =====================================================
 
   const handleFileChange = (e) => {
-    const selectedFile = e.target.files?.[0];
+    const selectedFile =
+      e.target.files?.[0];
 
-    if (!selectedFile) return;
+    if (!selectedFile) {
+      return;
+    }
 
     setError("");
+    setSuccess("");
 
-    if (!validateFile(selectedFile)) {
+    const isValid =
+      validateFile(selectedFile);
+
+    if (!isValid) {
       e.target.value = "";
       setFile(null);
       return;
@@ -200,78 +262,162 @@ const AddAssignment = () => {
     setError("");
     setSuccess("");
 
-    // Required validation
+    // ---------------------------------------------------
+    // TITLE
+    // ---------------------------------------------------
+
     if (!formData.title.trim()) {
-      setError("Please enter assignment title.");
+      setError(
+        "Please enter assignment title."
+      );
       return;
     }
+
+    // ---------------------------------------------------
+    // DESCRIPTION
+    // ---------------------------------------------------
 
     if (!formData.description.trim()) {
-      setError("Please enter assignment description.");
+      setError(
+        "Please enter assignment description."
+      );
       return;
     }
+
+    // ---------------------------------------------------
+    // COURSE
+    // ---------------------------------------------------
 
     if (!formData.courseId) {
-      setError("Please select a course.");
+      setError(
+        "Please select a course."
+      );
       return;
     }
+
+    // ---------------------------------------------------
+    // DUE DATE
+    // ---------------------------------------------------
 
     if (!formData.dueDate) {
-      setError("Please select a due date.");
+      setError(
+        "Please select a due date."
+      );
       return;
     }
 
-    // Check selected date
-    const selectedDate = new Date(formData.dueDate);
+    // ---------------------------------------------------
+    // DATE VALIDATION
+    // ---------------------------------------------------
+
+    const selectedDate =
+      new Date(formData.dueDate);
+
     const now = new Date();
 
-    if (selectedDate <= now) {
-      setError("Due date must be in the future.");
+    if (
+      Number.isNaN(selectedDate.getTime())
+    ) {
+      setError(
+        "Please select a valid due date."
+      );
       return;
     }
+
+    if (selectedDate <= now) {
+      setError(
+        "Due date must be in the future."
+      );
+      return;
+    }
+
+    // ---------------------------------------------------
+    // FILE VALIDATION
+    // ---------------------------------------------------
 
     if (file && !validateFile(file)) {
       return;
     }
 
-    if (!accessToken) {
-      setError("You are not logged in. Please login again.");
-      return;
-    }
+    // ---------------------------------------------------
+    // SUBMIT
+    // ---------------------------------------------------
 
     try {
       setLoading(true);
 
       const data = new FormData();
 
-      data.append("title", formData.title.trim());
-      data.append("description", formData.description.trim());
+      data.append(
+        "title",
+        formData.title.trim()
+      );
 
-      // IMPORTANT:
-      // Backend controller expects courseId
-      data.append("courseId", formData.courseId);
+      data.append(
+        "description",
+        formData.description.trim()
+      );
 
-      data.append("dueDate", formData.dueDate);
+      data.append(
+        "courseId",
+        formData.courseId
+      );
+
+      data.append(
+        "dueDate",
+        formData.dueDate
+      );
 
       if (file) {
         data.append("file", file);
       }
 
-      console.log("CREATING ASSIGNMENT:", {
-        title: formData.title,
-        courseId: formData.courseId,
-        dueDate: formData.dueDate,
-        file: file?.name,
-      });
+      console.log(
+        "CREATING ASSIGNMENT:",
+        {
+          title: formData.title.trim(),
+          description:
+            formData.description.trim(),
+          courseId: formData.courseId,
+          dueDate: formData.dueDate,
+          file: file?.name || null,
+        }
+      );
 
-      await axios.post(`${API_URL}/assignments`, data, {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-        },
-        timeout: 30000,
-      });
+      /*
+        IMPORTANT:
 
-      setSuccess("Assignment created successfully!");
+        Do NOT manually set Content-Type here.
+
+        Axios/browser will automatically create:
+
+        multipart/form-data;
+        boundary=...
+
+        Your existing api.js will also attach
+        the access token automatically.
+      */
+
+      const response = await api.post(
+        "/assignments",
+        data,
+        {
+          timeout: 30000,
+        }
+      );
+
+      console.log(
+        "CREATE ASSIGNMENT RESPONSE:",
+        response.data
+      );
+
+      setSuccess(
+        "Assignment created successfully!"
+      );
+
+      // -------------------------------------------------
+      // RESET FORM
+      // -------------------------------------------------
 
       setFormData({
         title: "",
@@ -286,15 +432,27 @@ const AddAssignment = () => {
         fileInputRef.current.value = "";
       }
 
-      // Redirect after success
+      // -------------------------------------------------
+      // REDIRECT
+      // -------------------------------------------------
+
       setTimeout(() => {
         navigate("/admin/assignments");
       }, 1200);
     } catch (err) {
-      console.error("CREATE ASSIGNMENT ERROR:", err);
+      console.error(
+        "CREATE ASSIGNMENT ERROR:",
+        err
+      );
+
+      console.error(
+        "SERVER RESPONSE:",
+        err?.response?.data
+      );
 
       setError(
-        err.response?.data?.message ||
+        err?.response?.data?.message ||
+          err?.message ||
           "Failed to create assignment. Please try again."
       );
     } finally {
@@ -303,32 +461,51 @@ const AddAssignment = () => {
   };
 
   // =====================================================
-  // FORMAT FILE SIZE
+  // FILE SIZE
   // =====================================================
 
   const formatFileSize = (bytes) => {
+    if (!bytes) {
+      return "0 B";
+    }
+
     if (bytes < 1024) {
       return `${bytes} B`;
     }
 
     if (bytes < 1024 * 1024) {
-      return `${(bytes / 1024).toFixed(1)} KB`;
+      return `${(
+        bytes / 1024
+      ).toFixed(1)} KB`;
     }
 
-    return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+    return `${(
+      bytes /
+      (1024 * 1024)
+    ).toFixed(2)} MB`;
   };
+
+  // =====================================================
+  // UI
+  // =====================================================
 
   return (
     <div className="min-h-screen bg-slate-50 px-4 py-6 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-4xl">
 
-        {/* =====================================================
+        {/* =================================================
             HEADER
-        ===================================================== */}
+        ================================================= */}
 
         <motion.div
-          initial={{ opacity: 0, y: -20 }}
-          animate={{ opacity: 1, y: 0 }}
+          initial={{
+            opacity: 0,
+            y: -20,
+          }}
+          animate={{
+            opacity: 1,
+            y: 0,
+          }}
           className="mb-6"
         >
           <Link
@@ -356,14 +533,20 @@ const AddAssignment = () => {
           </div>
         </motion.div>
 
-        {/* =====================================================
+        {/* =================================================
             ALERTS
-        ===================================================== */}
+        ================================================= */}
 
         {error && (
           <motion.div
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
+            initial={{
+              opacity: 0,
+              y: -10,
+            }}
+            animate={{
+              opacity: 1,
+              y: 0,
+            }}
             className="mb-5 flex items-start gap-3 rounded-2xl border border-red-200 bg-red-50 p-4 text-red-700"
           >
             <AlertCircle
@@ -379,8 +562,14 @@ const AddAssignment = () => {
 
         {success && (
           <motion.div
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
+            initial={{
+              opacity: 0,
+              y: -10,
+            }}
+            animate={{
+              opacity: 1,
+              y: 0,
+            }}
             className="mb-5 flex items-center gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-emerald-700"
           >
             <CheckCircle2
@@ -394,17 +583,26 @@ const AddAssignment = () => {
           </motion.div>
         )}
 
-        {/* =====================================================
+        {/* =================================================
             FORM
-        ===================================================== */}
+        ================================================= */}
 
         <motion.form
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1 }}
+          initial={{
+            opacity: 0,
+            y: 20,
+          }}
+          animate={{
+            opacity: 1,
+            y: 0,
+          }}
+          transition={{
+            delay: 0.1,
+          }}
           onSubmit={handleSubmit}
           className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-8"
         >
+
           {/* TITLE */}
 
           <div className="mb-6">
@@ -413,7 +611,9 @@ const AddAssignment = () => {
               className="mb-2 block text-sm font-semibold text-slate-700"
             >
               Assignment Title
-              <span className="ml-1 text-red-500">*</span>
+              <span className="ml-1 text-red-500">
+                *
+              </span>
             </label>
 
             <input
@@ -424,8 +624,8 @@ const AddAssignment = () => {
               onChange={handleChange}
               placeholder="e.g. Build a React Todo App"
               maxLength={150}
-              className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10"
               disabled={loading}
+              className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 disabled:bg-slate-50"
             />
           </div>
 
@@ -437,7 +637,9 @@ const AddAssignment = () => {
               className="mb-2 block text-sm font-semibold text-slate-700"
             >
               Description
-              <span className="ml-1 text-red-500">*</span>
+              <span className="ml-1 text-red-500">
+                *
+              </span>
             </label>
 
             <textarea
@@ -448,12 +650,13 @@ const AddAssignment = () => {
               placeholder="Explain what students need to complete..."
               rows={6}
               maxLength={3000}
-              className="w-full resize-none rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10"
               disabled={loading}
+              className="w-full resize-none rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 disabled:bg-slate-50"
             />
 
             <p className="mt-1 text-right text-xs text-slate-400">
-              {formData.description.length}/3000
+              {formData.description.length}
+              /3000
             </p>
           </div>
 
@@ -469,7 +672,9 @@ const AddAssignment = () => {
                 className="mb-2 block text-sm font-semibold text-slate-700"
               >
                 Select Course
-                <span className="ml-1 text-red-500">*</span>
+                <span className="ml-1 text-red-500">
+                  *
+                </span>
               </label>
 
               <div className="relative">
@@ -478,7 +683,10 @@ const AddAssignment = () => {
                   name="courseId"
                   value={formData.courseId}
                   onChange={handleChange}
-                  disabled={loadingCourses || loading}
+                  disabled={
+                    loadingCourses ||
+                    loading
+                  }
                   required
                   className="w-full appearance-none rounded-xl border border-slate-200 bg-white px-4 py-3 pr-11 text-sm text-slate-800 outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 disabled:cursor-not-allowed disabled:bg-slate-50"
                 >
@@ -489,14 +697,18 @@ const AddAssignment = () => {
                   </option>
 
                   {!loadingCourses &&
-                    courses.map((course) => (
-                      <option
-                        key={course._id}
-                        value={course._id}
-                      >
-                        {course.title}
-                      </option>
-                    ))}
+                    courses.map(
+                      (course) => (
+                        <option
+                          key={course._id}
+                          value={course._id}
+                        >
+                          {course.title ||
+                            course.name ||
+                            "Untitled Course"}
+                        </option>
+                      )
+                    )}
                 </select>
 
                 <ChevronDown
@@ -506,7 +718,7 @@ const AddAssignment = () => {
               </div>
 
               {courseError && (
-                <div className="mt-2 flex items-center justify-between gap-2">
+                <div className="mt-2 flex items-start justify-between gap-2">
                   <p className="text-xs text-red-500">
                     {courseError}
                   </p>
@@ -514,9 +726,12 @@ const AddAssignment = () => {
                   <button
                     type="button"
                     onClick={fetchCourses}
-                    className="text-xs font-semibold text-emerald-600 hover:text-emerald-700"
+                    disabled={loadingCourses}
+                    className="shrink-0 text-xs font-semibold text-emerald-600 hover:text-emerald-700 disabled:opacity-50"
                   >
-                    Retry
+                    {loadingCourses
+                      ? "Loading..."
+                      : "Retry"}
                   </button>
                 </div>
               )}
@@ -525,7 +740,11 @@ const AddAssignment = () => {
                 courses.length > 0 && (
                   <p className="mt-2 text-xs text-slate-400">
                     {courses.length} course
-                    {courses.length !== 1 ? "s" : ""} available
+                    {courses.length !==
+                    1
+                      ? "s"
+                      : ""}{" "}
+                    available
                   </p>
                 )}
             </div>
@@ -538,7 +757,9 @@ const AddAssignment = () => {
                 className="mb-2 block text-sm font-semibold text-slate-700"
               >
                 Due Date
-                <span className="ml-1 text-red-500">*</span>
+                <span className="ml-1 text-red-500">
+                  *
+                </span>
               </label>
 
               <div className="relative">
@@ -578,7 +799,9 @@ const AddAssignment = () => {
             {!file ? (
               <button
                 type="button"
-                onClick={() => fileInputRef.current?.click()}
+                onClick={() =>
+                  fileInputRef.current?.click()
+                }
                 disabled={loading}
                 className="group w-full rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50 p-8 text-center transition hover:border-emerald-400 hover:bg-emerald-50/40 disabled:cursor-not-allowed disabled:opacity-60"
               >
@@ -596,8 +819,14 @@ const AddAssignment = () => {
               </button>
             ) : (
               <motion.div
-                initial={{ opacity: 0, scale: 0.98 }}
-                animate={{ opacity: 1, scale: 1 }}
+                initial={{
+                  opacity: 0,
+                  scale: 0.98,
+                }}
+                animate={{
+                  opacity: 1,
+                  scale: 1,
+                }}
                 className="flex items-center justify-between gap-4 rounded-2xl border border-emerald-200 bg-emerald-50 p-4"
               >
                 <div className="flex min-w-0 items-center gap-3">
@@ -611,7 +840,9 @@ const AddAssignment = () => {
                     </p>
 
                     <p className="mt-1 text-xs text-slate-400">
-                      {formatFileSize(file.size)}
+                      {formatFileSize(
+                        file.size
+                      )}
                     </p>
                   </div>
                 </div>
@@ -648,7 +879,11 @@ const AddAssignment = () => {
 
             <button
               type="submit"
-              disabled={loading || loadingCourses || courses.length === 0}
+              disabled={
+                loading ||
+                loadingCourses ||
+                courses.length === 0
+              }
               className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-7 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {loading ? (
@@ -661,7 +896,9 @@ const AddAssignment = () => {
                 </>
               ) : (
                 <>
-                  <CheckCircle2 size={18} />
+                  <CheckCircle2
+                    size={18}
+                  />
                   Create Assignment
                 </>
               )}

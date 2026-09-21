@@ -5,9 +5,16 @@ import Navbar from "./Navbar";
 import Sidebar from "./Sidebar";
 import MobileSidebar from "./MobileSidebar";
 
-const DashboardLayout = ({ role = "user" }) => {
-  const [mobileSidebarOpen, setMobileSidebarOpen] =
-    useState(false);
+const DashboardLayout = ({ role = "user", children }) => {
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+
+  const handleOpenMobileSidebar = () => {
+    setMobileSidebarOpen(true);
+  };
+
+  const handleCloseMobileSidebar = () => {
+    setMobileSidebarOpen(false);
+  };
 
   return (
     <div
@@ -19,28 +26,33 @@ const DashboardLayout = ({ role = "user" }) => {
         to-green-50/30
       "
     >
-      {/* Navbar */}
-      <Navbar
-        onMenuClick={() =>
-          setMobileSidebarOpen(true)
-        }
-      />
+      {/* =====================================================
+          COMMON NAVBAR
+      ===================================================== */}
+
+      <Navbar onMenuClick={handleOpenMobileSidebar} />
 
       <div className="relative flex">
+        {/* =====================================================
+            DESKTOP SIDEBAR
+        ===================================================== */}
 
-        {/* Desktop Sidebar */}
         <Sidebar role={role} />
 
-        {/* Mobile Sidebar */}
+        {/* =====================================================
+            MOBILE SIDEBAR
+        ===================================================== */}
+
         <MobileSidebar
           role={role}
           isOpen={mobileSidebarOpen}
-          onClose={() =>
-            setMobileSidebarOpen(false)
-          }
+          onClose={handleCloseMobileSidebar}
         />
 
-        {/* Main Content */}
+        {/* =====================================================
+            MAIN CONTENT
+        ===================================================== */}
+
         <main
           className="
             min-h-[calc(100vh-5rem)]
@@ -62,7 +74,7 @@ const DashboardLayout = ({ role = "user" }) => {
               lg:p-8
             "
           >
-            <Outlet />
+           {children || <Outlet />}
           </div>
         </main>
       </div>
